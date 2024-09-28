@@ -1,0 +1,7 @@
+description = "spring roden-test"
+
+apply plugin: "kotlin"
+
+dependencies {
+    api(project(":spring-context"))
+}

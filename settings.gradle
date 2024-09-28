@@ -53,3 +53,4 @@ settings.gradle.projectsLoaded {
 		}
 	}
 }
+include 'roden-test'
