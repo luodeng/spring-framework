@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2023 the original author or authors.
+ * Copyright 2002-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,6 +18,7 @@ package org.springframework.web.socket.sockjs.support;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -30,6 +31,7 @@ import java.util.concurrent.TimeUnit;
 import jakarta.servlet.http.HttpServletRequest;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.jspecify.annotations.Nullable;
 
 import org.springframework.core.log.LogFormatUtils;
 import org.springframework.http.HttpHeaders;
@@ -39,7 +41,6 @@ import org.springframework.http.InvalidMediaTypeException;
 import org.springframework.http.MediaType;
 import org.springframework.http.server.ServerHttpRequest;
 import org.springframework.http.server.ServerHttpResponse;
-import org.springframework.lang.Nullable;
 import org.springframework.scheduling.TaskScheduler;
 import org.springframework.util.Assert;
 import org.springframework.util.CollectionUtils;
@@ -72,7 +73,7 @@ public abstract class AbstractSockJsService implements SockJsService, CorsConfig
 	private static final long ONE_YEAR = TimeUnit.DAYS.toSeconds(365);
 
 
-	private static final Random random = new Random();
+	private static final Random random = new SecureRandom();
 
 	protected final Log logger = LogFactory.getLog(getClass());
 
@@ -341,8 +342,7 @@ public abstract class AbstractSockJsService implements SockJsService, CorsConfig
 	 * @since 4.1.2
 	 */
 	@SuppressWarnings("ConstantConditions")
-	@Nullable
-	public Collection<String> getAllowedOrigins() {
+	public @Nullable Collection<String> getAllowedOrigins() {
 		return this.corsConfiguration.getAllowedOrigins();
 	}
 	/**
@@ -364,8 +364,7 @@ public abstract class AbstractSockJsService implements SockJsService, CorsConfig
 	 * @since 5.3.2
 	 */
 	@SuppressWarnings("ConstantConditions")
-	@Nullable
-	public Collection<String> getAllowedOriginPatterns() {
+	public @Nullable Collection<String> getAllowedOriginPatterns() {
 		return this.corsConfiguration.getAllowedOriginPatterns();
 	}
 
@@ -541,8 +540,7 @@ public abstract class AbstractSockJsService implements SockJsService, CorsConfig
 	}
 
 	@Override
-	@Nullable
-	public CorsConfiguration getCorsConfiguration(HttpServletRequest request) {
+	public @Nullable CorsConfiguration getCorsConfiguration(HttpServletRequest request) {
 		if (!this.suppressCors && (request.getHeader(HttpHeaders.ORIGIN) != null)) {
 			return this.corsConfiguration;
 		}

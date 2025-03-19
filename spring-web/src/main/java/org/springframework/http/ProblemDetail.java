@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2023 the original author or authors.
+ * Copyright 2002-2025 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,12 +16,14 @@
 
 package org.springframework.http;
 
+import java.io.Serializable;
 import java.net.URI;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 
-import org.springframework.lang.Nullable;
+import org.jspecify.annotations.Nullable;
+
 import org.springframework.util.Assert;
 import org.springframework.util.ObjectUtils;
 
@@ -49,26 +51,25 @@ import org.springframework.util.ObjectUtils;
  * @see org.springframework.web.ErrorResponse
  * @see org.springframework.web.ErrorResponseException
  */
-public class ProblemDetail {
+public class ProblemDetail implements Serializable {
+
+	private static final long serialVersionUID = 3307761915842206538L;
 
 	private static final URI BLANK_TYPE = URI.create("about:blank");
 
 
 	private URI type = BLANK_TYPE;
 
-	@Nullable
-	private String title;
+	private @Nullable String title;
 
 	private int status;
 
-	@Nullable
-	private String detail;
+	private @Nullable String detail;
 
-	@Nullable
-	private URI instance;
+	private @Nullable URI instance;
 
-	@Nullable
-	private Map<String, Object> properties;
+	@SuppressWarnings("serial")
+	private @Nullable Map<String, Object> properties;
 
 
 	/**
@@ -131,8 +132,7 @@ public class ProblemDetail {
 	/**
 	 * Return the configured {@link #setTitle(String) problem title}.
 	 */
-	@Nullable
-	public String getTitle() {
+	public @Nullable String getTitle() {
 		if (this.title == null) {
 			HttpStatus httpStatus = HttpStatus.resolve(this.status);
 			if (httpStatus != null) {
@@ -178,8 +178,7 @@ public class ProblemDetail {
 	/**
 	 * Return the configured {@link #setDetail(String) problem detail}.
 	 */
-	@Nullable
-	public String getDetail() {
+	public @Nullable String getDetail() {
 		return this.detail;
 	}
 
@@ -196,8 +195,7 @@ public class ProblemDetail {
 	/**
 	 * Return the configured {@link #setInstance(URI) problem instance}.
 	 */
-	@Nullable
-	public URI getInstance() {
+	public @Nullable URI getInstance() {
 		return this.instance;
 	}
 
@@ -239,8 +237,7 @@ public class ProblemDetail {
 	 * Otherwise, they are rendered as a {@code "properties"} sub-map.
 	 * @see org.springframework.http.converter.json.ProblemDetailJacksonMixin
 	 */
-	@Nullable
-	public Map<String, Object> getProperties() {
+	public @Nullable Map<String, Object> getProperties() {
 		return this.properties;
 	}
 

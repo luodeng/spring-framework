@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2024 the original author or authors.
+ * Copyright 2002-2025 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,6 +19,7 @@ package org.springframework.context.annotation;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.testfixture.beans.TestBean;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.core.testfixture.EnabledForTestGroups;
@@ -36,16 +37,146 @@ class BackgroundBootstrapTests {
 	@Test
 	@Timeout(5)
 	@EnabledForTestGroups(LONG_RUNNING)
+	void bootstrapWithUnmanagedThread() {
+		ConfigurableApplicationContext ctx = new AnnotationConfigApplicationContext(UnmanagedThreadBeanConfig.class);
+		ctx.getBean("testBean1", TestBean.class);
+		ctx.getBean("testBean2", TestBean.class);
+		ctx.close();
+	}
+
+	@Test
+	@Timeout(5)
+	@EnabledForTestGroups(LONG_RUNNING)
+	void bootstrapWithUnmanagedThreads() {
+		ConfigurableApplicationContext ctx = new AnnotationConfigApplicationContext(UnmanagedThreadsBeanConfig.class);
+		ctx.getBean("testBean1", TestBean.class);
+		ctx.getBean("testBean2", TestBean.class);
+		ctx.getBean("testBean3", TestBean.class);
+		ctx.getBean("testBean4", TestBean.class);
+		ctx.close();
+	}
+
+	@Test
+	@Timeout(5)
+	@EnabledForTestGroups(LONG_RUNNING)
+	void bootstrapWithCircularReference() {
+		ConfigurableApplicationContext ctx = new AnnotationConfigApplicationContext(CircularReferenceBeanConfig.class);
+		ctx.getBean("testBean1", TestBean.class);
+		ctx.getBean("testBean2", TestBean.class);
+		ctx.close();
+	}
+
+	@Test
+	@Timeout(5)
+	@EnabledForTestGroups(LONG_RUNNING)
 	void bootstrapWithCustomExecutor() {
 		ConfigurableApplicationContext ctx = new AnnotationConfigApplicationContext(CustomExecutorBeanConfig.class);
 		ctx.getBean("testBean1", TestBean.class);
 		ctx.getBean("testBean2", TestBean.class);
 		ctx.getBean("testBean3", TestBean.class);
+		ctx.getBean("testBean4", TestBean.class);
 		ctx.close();
 	}
 
 
-	@Configuration
+	@Configuration(proxyBeanMethods = false)
+	static class UnmanagedThreadBeanConfig {
+
+		@Bean
+		public TestBean testBean1(ObjectProvider<TestBean> testBean2) {
+			new Thread(testBean2::getObject).start();
+			try {
+				Thread.sleep(1000);
+			}
+			catch (InterruptedException ex) {
+				throw new RuntimeException(ex);
+			}
+			return new TestBean();
+		}
+
+		@Bean
+		public TestBean testBean2() {
+			try {
+				Thread.sleep(2000);
+			}
+			catch (InterruptedException ex) {
+				throw new RuntimeException(ex);
+			}
+			return new TestBean();
+		}
+	}
+
+
+	@Configuration(proxyBeanMethods = false)
+	static class UnmanagedThreadsBeanConfig {
+
+		@Bean
+		public TestBean testBean1(ObjectProvider<TestBean> testBean3, ObjectProvider<TestBean> testBean4) {
+			new Thread(testBean3::getObject).start();
+			new Thread(testBean4::getObject).start();
+			new Thread(testBean3::getObject).start();
+			new Thread(testBean4::getObject).start();
+			try {
+				Thread.sleep(1000);
+			}
+			catch (InterruptedException ex) {
+				throw new RuntimeException(ex);
+			}
+			return new TestBean();
+		}
+
+		@Bean
+		public TestBean testBean2(TestBean testBean4) {
+			return new TestBean(testBean4);
+		}
+
+		@Bean
+		public TestBean testBean3(TestBean testBean4) {
+			return new TestBean(testBean4);
+		}
+
+		@Bean
+		public TestBean testBean4() {
+			try {
+				Thread.sleep(2000);
+			}
+			catch (InterruptedException ex) {
+				throw new RuntimeException(ex);
+			}
+			return new TestBean();
+		}
+	}
+
+
+	@Configuration(proxyBeanMethods = false)
+	static class CircularReferenceBeanConfig {
+
+		@Bean
+		public TestBean testBean1(ObjectProvider<TestBean> testBean2) {
+			new Thread(testBean2::getObject).start();
+			try {
+				Thread.sleep(1000);
+			}
+			catch (InterruptedException ex) {
+				throw new RuntimeException(ex);
+			}
+			return new TestBean();
+		}
+
+		@Bean
+		public TestBean testBean2(TestBean testBean1) {
+			try {
+				Thread.sleep(2000);
+			}
+			catch (InterruptedException ex) {
+				throw new RuntimeException(ex);
+			}
+			return new TestBean();
+		}
+	}
+
+
+	@Configuration(proxyBeanMethods = false)
 	static class CustomExecutorBeanConfig {
 
 		@Bean
@@ -58,7 +189,7 @@ class BackgroundBootstrapTests {
 		}
 
 		@Bean(bootstrap = BACKGROUND) @DependsOn("testBean3")
-		public TestBean testBean1(TestBean testBean3) throws InterruptedException{
+		public TestBean testBean1(TestBean testBean3) throws InterruptedException {
 			Thread.sleep(3000);
 			return new TestBean();
 		}
@@ -75,8 +206,8 @@ class BackgroundBootstrapTests {
 		}
 
 		@Bean
-		public String dependent(@Lazy TestBean testBean1, @Lazy TestBean testBean2, @Lazy TestBean testBean3) {
-			return "";
+		public TestBean testBean4(@Lazy TestBean testBean1, @Lazy TestBean testBean2, @Lazy TestBean testBean3) {
+			return new TestBean();
 		}
 	}
 

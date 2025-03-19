@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2024 the original author or authors.
+ * Copyright 2002-2025 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -40,7 +40,6 @@ import org.springframework.core.Ordered;
 import org.springframework.core.annotation.subpackage.NonPublicAnnotatedClass;
 import org.springframework.core.testfixture.ide.IdeUtils;
 import org.springframework.core.testfixture.stereotype.Component;
-import org.springframework.lang.NonNullApi;
 
 import static java.util.Arrays.asList;
 import static java.util.Arrays.stream;
@@ -429,8 +428,7 @@ class AnnotationUtilsTests {
 	@Test
 	void isAnnotationMetaPresentForPlainType() {
 		assertThat(isAnnotationMetaPresent(Order.class, Documented.class)).isTrue();
-		assertThat(isAnnotationMetaPresent(NonNullApi.class, Documented.class)).isTrue();
-		assertThat(isAnnotationMetaPresent(NonNullApi.class, Nonnull.class)).isTrue();
+		assertThat(isAnnotationMetaPresent(ParametersAreNonnullByDefault.class, Documented.class)).isTrue();
 		assertThat(isAnnotationMetaPresent(ParametersAreNonnullByDefault.class, Nonnull.class)).isTrue();
 	}
 
@@ -1364,8 +1362,7 @@ class AnnotationUtilsTests {
 	@WebMapping(method = RequestMethod.POST, name = "")
 	@interface Post {
 
-		// Do NOT use @AliasFor here until Spring 6.1
-		// @AliasFor(annotation = WebMapping.class)
+		// Do NOT use @AliasFor here
 		String path() default "";
 	}
 

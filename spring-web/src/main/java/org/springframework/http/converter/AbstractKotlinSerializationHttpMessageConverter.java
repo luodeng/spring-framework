@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2024 the original author or authors.
+ * Copyright 2002-2025 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,9 +19,7 @@ package org.springframework.http.converter;
 import java.io.IOException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Type;
-import java.util.HashSet;
 import java.util.Map;
-import java.util.Set;
 
 import kotlin.reflect.KFunction;
 import kotlin.reflect.KType;
@@ -30,8 +28,7 @@ import kotlin.reflect.jvm.ReflectJvmMapping;
 import kotlinx.serialization.KSerializer;
 import kotlinx.serialization.SerialFormat;
 import kotlinx.serialization.SerializersKt;
-import kotlinx.serialization.descriptors.PolymorphicKind;
-import kotlinx.serialization.descriptors.SerialDescriptor;
+import org.jspecify.annotations.Nullable;
 
 import org.springframework.core.KotlinDetector;
 import org.springframework.core.MethodParameter;
@@ -39,7 +36,6 @@ import org.springframework.core.ResolvableType;
 import org.springframework.http.HttpInputMessage;
 import org.springframework.http.HttpOutputMessage;
 import org.springframework.http.MediaType;
-import org.springframework.lang.Nullable;
 import org.springframework.util.Assert;
 import org.springframework.util.ConcurrentReferenceHashMap;
 
@@ -47,6 +43,10 @@ import org.springframework.util.ConcurrentReferenceHashMap;
 /**
  * Abstract base class for {@link HttpMessageConverter} implementations that
  * use Kotlin serialization.
+ *
+ * <p>As of Spring Framework 7.0,
+ * <a href="https://github.com/Kotlin/kotlinx.serialization/blob/master/docs/polymorphism.md#open-polymorphism">open polymorphism</a>
+ * is supported.
  *
  * @author Andreas Ahlenstorf
  * @author Sebastien Deleuze
@@ -143,31 +143,28 @@ public abstract class AbstractKotlinSerializationHttpMessageConverter<T extends 
 	 * @param resolvableType the type to find a serializer for
 	 * @return a resolved serializer for the given type, or {@code null}
 	 */
-	@Nullable
-	private KSerializer<Object> serializer(ResolvableType resolvableType) {
+	private @Nullable KSerializer<Object> serializer(ResolvableType resolvableType) {
 		if (resolvableType.getSource() instanceof MethodParameter parameter) {
 			Method method = parameter.getMethod();
 			Assert.notNull(method, "Method must not be null");
 			if (KotlinDetector.isKotlinType(method.getDeclaringClass())) {
 				KFunction<?> function = ReflectJvmMapping.getKotlinFunction(method);
-				Assert.notNull(function, "Kotlin function must not be null");
-				KType type = (parameter.getParameterIndex() == -1 ? function.getReturnType() :
-						KCallables.getValueParameters(function).get(parameter.getParameterIndex()).getType());
-				KSerializer<Object> serializer = this.kTypeSerializerCache.get(type);
-				if (serializer == null) {
-					try {
-						serializer = SerializersKt.serializerOrNull(this.format.getSerializersModule(), type);
-					}
-					catch (IllegalArgumentException ignored) {
-					}
-					if (serializer != null) {
-						if (hasPolymorphism(serializer.getDescriptor(), new HashSet<>())) {
-							return null;
+				if (function != null) {
+					KType type = (parameter.getParameterIndex() == -1 ? function.getReturnType() :
+							KCallables.getValueParameters(function).get(parameter.getParameterIndex()).getType());
+					KSerializer<Object> serializer = this.kTypeSerializerCache.get(type);
+					if (serializer == null) {
+						try {
+							serializer = SerializersKt.serializerOrNull(this.format.getSerializersModule(), type);
 						}
-						this.kTypeSerializerCache.put(type, serializer);
+						catch (IllegalArgumentException ignored) {
+						}
+						if (serializer != null) {
+							this.kTypeSerializerCache.put(type, serializer);
+						}
 					}
+					return serializer;
 				}
-				return serializer;
 			}
 		}
 		Type type = resolvableType.getType();
@@ -179,27 +176,10 @@ public abstract class AbstractKotlinSerializationHttpMessageConverter<T extends 
 			catch (IllegalArgumentException ignored) {
 			}
 			if (serializer != null) {
-				if (hasPolymorphism(serializer.getDescriptor(), new HashSet<>())) {
-					return null;
-				}
 				this.typeSerializerCache.put(type, serializer);
 			}
 		}
 		return serializer;
-	}
-
-	private boolean hasPolymorphism(SerialDescriptor descriptor, Set<String> alreadyProcessed) {
-		alreadyProcessed.add(descriptor.getSerialName());
-		if (descriptor.getKind().equals(PolymorphicKind.OPEN.INSTANCE)) {
-			return true;
-		}
-		for (int i = 0 ; i < descriptor.getElementsCount() ; i++) {
-			SerialDescriptor elementDescriptor = descriptor.getElementDescriptor(i);
-			if (!alreadyProcessed.contains(elementDescriptor.getSerialName()) && hasPolymorphism(elementDescriptor, alreadyProcessed)) {
-				return true;
-			}
-		}
-		return false;
 	}
 
 	@Override

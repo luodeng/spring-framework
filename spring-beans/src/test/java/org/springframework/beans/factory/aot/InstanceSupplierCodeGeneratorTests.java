@@ -47,7 +47,9 @@ import org.springframework.beans.testfixture.beans.factory.aot.SimpleBean;
 import org.springframework.beans.testfixture.beans.factory.aot.SimpleBeanContract;
 import org.springframework.beans.testfixture.beans.factory.generator.InnerComponentConfiguration;
 import org.springframework.beans.testfixture.beans.factory.generator.InnerComponentConfiguration.EnvironmentAwareComponent;
+import org.springframework.beans.testfixture.beans.factory.generator.InnerComponentConfiguration.EnvironmentAwareComponentWithoutPublicConstructor;
 import org.springframework.beans.testfixture.beans.factory.generator.InnerComponentConfiguration.NoDependencyComponent;
+import org.springframework.beans.testfixture.beans.factory.generator.InnerComponentConfiguration.NoDependencyComponentWithoutPublicConstructor;
 import org.springframework.beans.testfixture.beans.factory.generator.SimpleConfiguration;
 import org.springframework.beans.testfixture.beans.factory.generator.deprecation.DeprecatedBean;
 import org.springframework.beans.testfixture.beans.factory.generator.deprecation.DeprecatedConstructor;
@@ -98,8 +100,7 @@ class InstanceSupplierCodeGeneratorTests {
 			assertThat(compiled.getSourceFile())
 					.contains("InstanceSupplier.using(TestBean::new)");
 		});
-		assertThat(getReflectionHints().getTypeHint(TestBean.class))
-				.satisfies(hasConstructorWithMode(ExecutableMode.INTROSPECT));
+		assertThat(getReflectionHints().getTypeHint(TestBean.class)).isNotNull();
 	}
 
 	@Test
@@ -110,8 +111,7 @@ class InstanceSupplierCodeGeneratorTests {
 			InjectionComponent bean = getBean(beanDefinition, instanceSupplier);
 			assertThat(bean).isInstanceOf(InjectionComponent.class).extracting("bean").isEqualTo("injected");
 		});
-		assertThat(getReflectionHints().getTypeHint(InjectionComponent.class))
-				.satisfies(hasConstructorWithMode(ExecutableMode.INTROSPECT));
+		assertThat(getReflectionHints().getTypeHint(InjectionComponent.class)).isNotNull();
 	}
 
 	@Test
@@ -119,13 +119,12 @@ class InstanceSupplierCodeGeneratorTests {
 		RootBeanDefinition beanDefinition = new RootBeanDefinition(NoDependencyComponent.class);
 		this.beanFactory.registerSingleton("configuration", new InnerComponentConfiguration());
 		compile(beanDefinition, (instanceSupplier, compiled) -> {
-			NoDependencyComponent bean = getBean(beanDefinition, instanceSupplier);
+			Object bean = getBean(beanDefinition, instanceSupplier);
 			assertThat(bean).isInstanceOf(NoDependencyComponent.class);
 			assertThat(compiled.getSourceFile()).contains(
-					"InstanceSupplier.using(InnerComponentConfiguration.NoDependencyComponent::new");
+					"getBeanFactory().getBean(InnerComponentConfiguration.class).new NoDependencyComponent()");
 		});
-		assertThat(getReflectionHints().getTypeHint(NoDependencyComponent.class))
-				.satisfies(hasConstructorWithMode(ExecutableMode.INTROSPECT));
+		assertThat(getReflectionHints().getTypeHint(NoDependencyComponent.class)).isNotNull();
 	}
 
 	@Test
@@ -134,13 +133,41 @@ class InstanceSupplierCodeGeneratorTests {
 		this.beanFactory.registerSingleton("configuration", new InnerComponentConfiguration());
 		this.beanFactory.registerSingleton("environment", new StandardEnvironment());
 		compile(beanDefinition, (instanceSupplier, compiled) -> {
-			EnvironmentAwareComponent bean = getBean(beanDefinition, instanceSupplier);
+			Object bean = getBean(beanDefinition, instanceSupplier);
 			assertThat(bean).isInstanceOf(EnvironmentAwareComponent.class);
 			assertThat(compiled.getSourceFile()).contains(
-					"new InnerComponentConfiguration.EnvironmentAwareComponent(");
+					"getBeanFactory().getBean(InnerComponentConfiguration.class).new EnvironmentAwareComponent(");
 		});
-		assertThat(getReflectionHints().getTypeHint(EnvironmentAwareComponent.class))
-				.satisfies(hasConstructorWithMode(ExecutableMode.INTROSPECT));
+		assertThat(getReflectionHints().getTypeHint(EnvironmentAwareComponent.class)).isNotNull();
+	}
+
+	@Test
+	void generateWhenHasNonPublicConstructorWithInnerClassAndDefaultConstructor() {
+		RootBeanDefinition beanDefinition = new RootBeanDefinition(NoDependencyComponentWithoutPublicConstructor.class);
+		this.beanFactory.registerSingleton("configuration", new InnerComponentConfiguration());
+		compile(beanDefinition, (instanceSupplier, compiled) -> {
+			Object bean = getBean(beanDefinition, instanceSupplier);
+			assertThat(bean).isInstanceOf(NoDependencyComponentWithoutPublicConstructor.class);
+			assertThat(compiled.getSourceFile()).doesNotContain(
+					"getBeanFactory().getBean(InnerComponentConfiguration.class)");
+		});
+		assertThat(getReflectionHints().getTypeHint(NoDependencyComponentWithoutPublicConstructor.class))
+				.satisfies(hasConstructorWithMode(ExecutableMode.INVOKE));
+	}
+
+	@Test
+	void generateWhenHasNonPublicConstructorWithInnerClassAndParameter() {
+		BeanDefinition beanDefinition = new RootBeanDefinition(EnvironmentAwareComponentWithoutPublicConstructor.class);
+		this.beanFactory.registerSingleton("configuration", new InnerComponentConfiguration());
+		this.beanFactory.registerSingleton("environment", new StandardEnvironment());
+		compile(beanDefinition, (instanceSupplier, compiled) -> {
+			Object bean = getBean(beanDefinition, instanceSupplier);
+			assertThat(bean).isInstanceOf(EnvironmentAwareComponentWithoutPublicConstructor.class);
+			assertThat(compiled.getSourceFile()).doesNotContain(
+					"getBeanFactory().getBean(InnerComponentConfiguration.class)");
+		});
+		assertThat(getReflectionHints().getTypeHint(EnvironmentAwareComponentWithoutPublicConstructor.class))
+				.satisfies(hasConstructorWithMode(ExecutableMode.INVOKE));
 	}
 
 	@Test
@@ -153,8 +180,7 @@ class InstanceSupplierCodeGeneratorTests {
 			assertThat(bean).extracting("number").isNull(); // No property actually set
 			assertThat(compiled.getSourceFile()).contains("NumberHolderFactoryBean::new");
 		});
-		assertThat(getReflectionHints().getTypeHint(NumberHolderFactoryBean.class))
-				.satisfies(hasConstructorWithMode(ExecutableMode.INTROSPECT));
+		assertThat(getReflectionHints().getTypeHint(NumberHolderFactoryBean.class)).isNotNull();
 	}
 
 	@Test
@@ -184,8 +210,7 @@ class InstanceSupplierCodeGeneratorTests {
 			assertThat(compiled.getSourceFile()).contains(
 					"getBeanFactory().getBean(\"config\", SimpleConfiguration.class).stringBean()");
 		});
-		assertThat(getReflectionHints().getTypeHint(SimpleConfiguration.class))
-				.satisfies(hasMethodWithMode(ExecutableMode.INTROSPECT));
+		assertThat(getReflectionHints().getTypeHint(SimpleConfiguration.class)).isNotNull();
 	}
 
 	@Test
@@ -201,8 +226,7 @@ class InstanceSupplierCodeGeneratorTests {
 			assertThat(compiled.getSourceFile()).contains(
 					"getBeanFactory().getBean(\"config\", DefaultSimpleBeanContract.class).simpleBean()");
 		});
-		assertThat(getReflectionHints().getTypeHint(SimpleBeanContract.class))
-				.satisfies(hasMethodWithMode(ExecutableMode.INTROSPECT));
+		assertThat(getReflectionHints().getTypeHint(SimpleBeanContract.class)).isNotNull();
 	}
 
 	@Test
@@ -237,8 +261,7 @@ class InstanceSupplierCodeGeneratorTests {
 			assertThat(compiled.getSourceFile())
 					.contains("(registeredBean) -> SimpleConfiguration.integerBean()");
 		});
-		assertThat(getReflectionHints().getTypeHint(SimpleConfiguration.class))
-				.satisfies(hasMethodWithMode(ExecutableMode.INTROSPECT));
+		assertThat(getReflectionHints().getTypeHint(SimpleConfiguration.class)).isNotNull();
 	}
 
 	@Test
@@ -256,8 +279,7 @@ class InstanceSupplierCodeGeneratorTests {
 			assertThat(bean).isEqualTo("42test");
 			assertThat(compiled.getSourceFile()).contains("SampleFactory.create(");
 		});
-		assertThat(getReflectionHints().getTypeHint(SampleFactory.class))
-				.satisfies(hasMethodWithMode(ExecutableMode.INTROSPECT));
+		assertThat(getReflectionHints().getTypeHint(SampleFactory.class)).isNotNull();
 	}
 
 	@Test
@@ -274,8 +296,7 @@ class InstanceSupplierCodeGeneratorTests {
 			assertThat(bean).isEqualTo(42);
 			assertThat(compiled.getSourceFile()).doesNotContain(") throws Exception {");
 		});
-		assertThat(getReflectionHints().getTypeHint(SimpleConfiguration.class))
-				.satisfies(hasMethodWithMode(ExecutableMode.INTROSPECT));
+		assertThat(getReflectionHints().getTypeHint(SimpleConfiguration.class)).isNotNull();
 	}
 
 

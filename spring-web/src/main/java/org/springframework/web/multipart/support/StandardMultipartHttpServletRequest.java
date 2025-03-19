@@ -28,15 +28,16 @@ import java.util.Collections;
 import java.util.Enumeration;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.Part;
+import org.jspecify.annotations.Nullable;
 
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
-import org.springframework.lang.Nullable;
 import org.springframework.util.CollectionUtils;
 import org.springframework.util.FileCopyUtils;
 import org.springframework.util.LinkedMultiValueMap;
@@ -57,7 +58,7 @@ import org.springframework.web.multipart.MultipartFile;
  */
 public class StandardMultipartHttpServletRequest extends AbstractMultipartHttpServletRequest {
 
-	@Nullable
+	@SuppressWarnings("NullAway.Init")
 	private Set<String> multipartParameterNames;
 
 
@@ -118,7 +119,7 @@ public class StandardMultipartHttpServletRequest extends AbstractMultipartHttpSe
 		do {
 			String msg = cause.getMessage();
 			if (msg != null) {
-				msg = msg.toLowerCase();
+				msg = msg.toLowerCase(Locale.ROOT);
 				if ((msg.contains("exceed") && (msg.contains("size") || msg.contains("length"))) ||
 						(msg.contains("request") && (msg.contains("big") || msg.contains("large")))) {
 					throw new MaxUploadSizeExceededException(-1, ex);
@@ -138,7 +139,6 @@ public class StandardMultipartHttpServletRequest extends AbstractMultipartHttpSe
 	}
 
 	@Override
-	@SuppressWarnings("NullAway")
 	public Enumeration<String> getParameterNames() {
 		if (this.multipartParameterNames == null) {
 			initializeMultipart();
@@ -159,7 +159,6 @@ public class StandardMultipartHttpServletRequest extends AbstractMultipartHttpSe
 	}
 
 	@Override
-	@SuppressWarnings("NullAway")
 	public Map<String, String[]> getParameterMap() {
 		if (this.multipartParameterNames == null) {
 			initializeMultipart();
@@ -180,8 +179,7 @@ public class StandardMultipartHttpServletRequest extends AbstractMultipartHttpSe
 	}
 
 	@Override
-	@Nullable
-	public String getMultipartContentType(String paramOrFileName) {
+	public @Nullable String getMultipartContentType(String paramOrFileName) {
 		try {
 			Part part = getPart(paramOrFileName);
 			return (part != null ? part.getContentType() : null);
@@ -192,8 +190,7 @@ public class StandardMultipartHttpServletRequest extends AbstractMultipartHttpSe
 	}
 
 	@Override
-	@Nullable
-	public HttpHeaders getMultipartHeaders(String paramOrFileName) {
+	public @Nullable HttpHeaders getMultipartHeaders(String paramOrFileName) {
 		try {
 			Part part = getPart(paramOrFileName);
 			if (part != null) {

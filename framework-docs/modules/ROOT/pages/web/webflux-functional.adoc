@@ -1,5 +1,6 @@
 [[webflux-fn]]
 = Functional Endpoints
+
 [.small]#xref:web/webmvc-functional.adoc[See equivalent in the Servlet stack]#
 
 Spring WebFlux includes WebFlux.fn, a lightweight functional programming model in which functions
@@ -803,8 +804,7 @@ Java::
 [source,java,indent=0,subs="verbatim,quotes"]
 ----
 	ClassPathResource index = new ClassPathResource("static/index.html");
-	List<String> extensions = List.of("js", "css", "ico", "png", "jpg", "gif");
-	RequestPredicate spaPredicate = path("/api/**").or(path("/error")).or(pathExtension(extensions::contains)).negate();
+	RequestPredicate spaPredicate = path("/api/**").or(path("/error")).negate();
 	RouterFunction<ServerResponse> redirectToIndex = route()
 		.resource(spaPredicate, index)
 		.build();
@@ -816,9 +816,7 @@ Kotlin::
 ----
 	val redirectToIndex = router {
 		val index = ClassPathResource("static/index.html")
-		val extensions = listOf("js", "css", "ico", "png", "jpg", "gif")
-		val spaPredicate = !(path("/api/**") or path("/error") or
-			pathExtension(extensions::contains))
+		val spaPredicate = !(path("/api/**") or path("/error"))
 		resource(spaPredicate, index)
 	}
 ----
@@ -835,7 +833,7 @@ Java::
 +
 [source,java,indent=0,subs="verbatim,quotes"]
 ----
-    Resource location = new FileSystemResource("public-resources/");
+    Resource location = new FileUrlResource("public-resources/");
     RouterFunction<ServerResponse> resources = RouterFunctions.resources("/resources/**", location);
 ----
 
@@ -843,7 +841,7 @@ Kotlin::
 +
 [source,kotlin,indent=0,subs="verbatim,quotes"]
 ----
-    val location = FileSystemResource("public-resources/")
+    val location = FileUrlResource("public-resources/")
     val resources = router { resources("/resources/**", location) }
 ----
 ======

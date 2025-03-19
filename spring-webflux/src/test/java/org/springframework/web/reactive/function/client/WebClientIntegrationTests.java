@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2024 the original author or authors.
+ * Copyright 2002-2025 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -77,7 +77,6 @@ import org.springframework.http.client.reactive.HttpComponentsClientHttpConnecto
 import org.springframework.http.client.reactive.JdkClientHttpConnector;
 import org.springframework.http.client.reactive.JettyClientHttpConnector;
 import org.springframework.http.client.reactive.ReactorClientHttpConnector;
-import org.springframework.http.client.reactive.ReactorNetty2ClientHttpConnector;
 import org.springframework.web.reactive.function.BodyExtractors;
 import org.springframework.web.reactive.function.client.WebClient.ResponseSpec;
 import org.springframework.web.testfixture.xml.Pojo;
@@ -199,20 +198,22 @@ class WebClientIntegrationTests {
 		Mono<Void> result = this.webClient.get()
 				.uri("/pojo")
 				.attribute("foo","bar")
-				.httpRequest(clientHttpRequest -> nativeRequest.set(clientHttpRequest.getNativeRequest()))
+				.httpRequest(clientHttpRequest -> {
+					if (clientHttpRequest instanceof ChannelOperations<?,?> nettyReq) {
+						nativeRequest.set(nettyReq.channel().attr(ReactorClientHttpConnector.ATTRIBUTES_KEY));
+					}
+					else {
+						nativeRequest.set(clientHttpRequest.getNativeRequest());
+					}
+				})
 				.retrieve()
 				.bodyToMono(Void.class);
 
 		StepVerifier.create(result).expectComplete().verify();
 
-		if (nativeRequest.get() instanceof ChannelOperations<?,?> nativeReq) {
-			Attribute<Map<String, Object>> attributes = nativeReq.channel().attr(ReactorClientHttpConnector.ATTRIBUTES_KEY);
-			assertThat(attributes.get()).isNotNull();
-			assertThat(attributes.get()).containsEntry("foo", "bar");
-		}
-		else if (nativeRequest.get() instanceof reactor.netty5.channel.ChannelOperations<?,?> nativeReq) {
-			io.netty5.util.Attribute<Map<String, Object>> attributes =
-					nativeReq.channel().attr(ReactorNetty2ClientHttpConnector.ATTRIBUTES_KEY);
+		if (nativeRequest.get() instanceof Attribute<?>) {
+			@SuppressWarnings("unchecked")
+			Attribute<Map<String, Object>> attributes = (Attribute<Map<String, Object>>) nativeRequest.get();
 			assertThat(attributes.get()).isNotNull();
 			assertThat(attributes.get()).containsEntry("foo", "bar");
 		}
@@ -588,7 +589,6 @@ class WebClientIntegrationTests {
 					assertThat(throwable).isInstanceOf(WebClientResponseException.class);
 					WebClientResponseException ex = (WebClientResponseException) throwable;
 					assertThat(ex.getStatusCode()).isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR);
-					assertThat(ex.getRawStatusCode()).isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR.value());
 					assertThat(ex.getStatusText()).isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR.getReasonPhrase());
 					assertThat(ex.getHeaders().getContentType()).isEqualTo(MediaType.TEXT_PLAIN);
 					assertThat(ex.getResponseBodyAsString()).isEqualTo(errorMessage);
@@ -697,7 +697,6 @@ class WebClientIntegrationTests {
 					assertThat(throwable).isInstanceOf(UnknownHttpStatusCodeException.class);
 					UnknownHttpStatusCodeException ex = (UnknownHttpStatusCodeException) throwable;
 					assertThat(ex.getMessage()).isEqualTo(("Unknown status code ["+errorStatus+"]"));
-					assertThat(ex.getRawStatusCode()).isEqualTo(errorStatus);
 					assertThat(ex.getStatusText()).isEmpty();
 					assertThat(ex.getHeaders().getContentType()).isEqualTo(MediaType.TEXT_PLAIN);
 					assertThat(ex.getResponseBodyAsString()).isEqualTo(errorMessage);
@@ -935,11 +934,6 @@ class WebClientIntegrationTests {
 	@ParameterizedWebClientTest
 	void statusHandlerSuppressedErrorSignalWithFlux(ClientHttpConnector connector) {
 
-		// Temporarily disabled, leads to io.netty5.buffer.BufferClosedException
-		if (connector instanceof ReactorNetty2ClientHttpConnector) {
-			return;
-		}
-
 		startServer(connector);
 
 		prepareResponse(response -> response.setResponseCode(500)
@@ -1137,7 +1131,6 @@ class WebClientIntegrationTests {
 	}
 
 	@ParameterizedWebClientTest
-	@SuppressWarnings("deprecation")
 	void exchangeForUnknownStatusCode(ClientHttpConnector connector) {
 		startServer(connector);
 
@@ -1152,7 +1145,7 @@ class WebClientIntegrationTests {
 				.exchangeToMono(ClientResponse::toBodilessEntity);
 
 		StepVerifier.create(result)
-				.consumeNextWith(entity -> assertThat(entity.getStatusCodeValue()).isEqualTo(555))
+				.consumeNextWith(entity -> assertThat(entity.getStatusCode().value()).isEqualTo(555))
 				.expectComplete()
 				.verify(Duration.ofSeconds(3));
 

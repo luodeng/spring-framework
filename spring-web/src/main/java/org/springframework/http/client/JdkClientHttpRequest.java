@@ -28,6 +28,7 @@ import java.net.http.HttpTimeoutException;
 import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.util.Collections;
+import java.util.Locale;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.concurrent.CancellationException;
@@ -37,9 +38,10 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.Flow;
 import java.util.concurrent.TimeUnit;
 
+import org.jspecify.annotations.Nullable;
+
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
-import org.springframework.lang.Nullable;
 import org.springframework.util.StreamUtils;
 import org.springframework.util.StringUtils;
 
@@ -66,8 +68,7 @@ class JdkClientHttpRequest extends AbstractStreamingClientHttpRequest {
 
 	private final Executor executor;
 
-	@Nullable
-	private final Duration timeout;
+	private final @Nullable Duration timeout;
 
 
 	public JdkClientHttpRequest(HttpClient httpClient, URI uri, HttpMethod method, Executor executor,
@@ -93,7 +94,6 @@ class JdkClientHttpRequest extends AbstractStreamingClientHttpRequest {
 
 
 	@Override
-	@SuppressWarnings("NullAway")
 	protected ClientHttpResponse executeInternal(HttpHeaders headers, @Nullable Body body) throws IOException {
 		CompletableFuture<HttpResponse<InputStream>> responseFuture = null;
 		try {
@@ -119,7 +119,7 @@ class JdkClientHttpRequest extends AbstractStreamingClientHttpRequest {
 		catch (ExecutionException ex) {
 			Throwable cause = ex.getCause();
 
-			if (cause instanceof CancellationException caEx) {
+			if (cause instanceof CancellationException) {
 				throw new HttpTimeoutException("Request timed out");
 			}
 			if (cause instanceof UncheckedIOException uioEx) {
@@ -132,7 +132,8 @@ class JdkClientHttpRequest extends AbstractStreamingClientHttpRequest {
 				throw ioEx;
 			}
 			else {
-				throw new IOException(cause.getMessage(), cause);
+				String message = (cause == null ? null : cause.getMessage());
+				throw (message == null ? new IOException(cause) : new IOException(message, cause));
 			}
 		}
 	}
@@ -141,7 +142,7 @@ class JdkClientHttpRequest extends AbstractStreamingClientHttpRequest {
 		HttpRequest.Builder builder = HttpRequest.newBuilder().uri(this.uri);
 
 		headers.forEach((headerName, headerValues) -> {
-			if (!DISALLOWED_HEADERS.contains(headerName.toLowerCase())) {
+			if (!DISALLOWED_HEADERS.contains(headerName.toLowerCase(Locale.ROOT))) {
 				for (String headerValue : headerValues) {
 					builder.header(headerName, headerValue);
 				}
@@ -243,8 +244,7 @@ class JdkClientHttpRequest extends AbstractStreamingClientHttpRequest {
 
 		}
 
-		@Nullable
-		public InputStream wrapInputStream(HttpResponse<InputStream> response) {
+		public @Nullable InputStream wrapInputStream(HttpResponse<InputStream> response) {
 			InputStream body = response.body();
 			if (body == null) {
 				return body;

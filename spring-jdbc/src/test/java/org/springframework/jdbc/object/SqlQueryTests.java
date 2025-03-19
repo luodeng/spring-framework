@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2024 the original author or authors.
+ * Copyright 2002-2025 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -29,6 +29,7 @@ import java.util.Map;
 
 import javax.sql.DataSource;
 
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -36,7 +37,6 @@ import org.springframework.dao.IncorrectResultSizeDataAccessException;
 import org.springframework.dao.InvalidDataAccessApiUsageException;
 import org.springframework.jdbc.Customer;
 import org.springframework.jdbc.core.SqlParameter;
-import org.springframework.lang.Nullable;
 import org.springframework.util.StringUtils;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -55,7 +55,6 @@ import static org.mockito.Mockito.verify;
  */
 class SqlQueryTests {
 
-	//FIXME inline?
 	private static final String SELECT_ID =
 			"select id from custmr";
 	private static final String SELECT_ID_WHERE =
@@ -108,7 +107,7 @@ class SqlQueryTests {
 
 		SqlQuery<Integer> query = new MappingSqlQueryWithParameters<>() {
 			@Override
-			protected Integer mapRow(ResultSet rs, int rownum, @Nullable Object[] params, @Nullable Map<? ,?> context)
+			protected Integer mapRow(ResultSet rs, int rownum, Object @Nullable [] params, @Nullable Map<? ,?> context)
 					throws SQLException {
 				assertThat(params).as("params were null").isNull();
 				assertThat(context).as("context was null").isNull();
@@ -168,7 +167,6 @@ class SqlQueryTests {
 		given(resultSet.next()).willReturn(true, true, true, false);
 		given(resultSet.getString(1)).willReturn(dbResults[0], dbResults[1], dbResults[2]);
 		StringQuery query = new StringQuery(dataSource, SELECT_FORENAME);
-		query.setRowsExpected(3);
 		String[] results = query.run();
 		assertThat(results).isEqualTo(dbResults);
 		verify(connection).prepareStatement(SELECT_FORENAME);

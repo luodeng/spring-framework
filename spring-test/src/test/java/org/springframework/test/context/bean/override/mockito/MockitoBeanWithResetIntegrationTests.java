@@ -16,6 +16,7 @@
 
 package org.springframework.test.context.bean.override.mockito;
 
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.MethodOrderer.OrderAnnotation;
 import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
@@ -25,7 +26,6 @@ import org.springframework.beans.factory.FactoryBean;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.lang.Nullable;
 import org.springframework.test.context.bean.override.example.ExampleService;
 import org.springframework.test.context.bean.override.example.FailingExampleService;
 import org.springframework.test.context.bean.override.example.RealExampleService;
@@ -33,6 +33,7 @@ import org.springframework.test.context.junit.jupiter.SpringJUnitConfig;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.doReturn;
+import static org.springframework.test.context.bean.override.mockito.MockReset.BEFORE;
 
 /**
  * Integration tests for {@link MockitoBean} that validate automatic reset
@@ -45,10 +46,10 @@ import static org.mockito.Mockito.doReturn;
 @TestMethodOrder(OrderAnnotation.class)
 public class MockitoBeanWithResetIntegrationTests {
 
-	@MockitoBean(reset = MockReset.BEFORE)
+	@MockitoBean(reset = BEFORE)
 	ExampleService service;
 
-	@MockitoBean(reset = MockReset.BEFORE)
+	@MockitoBean(reset = BEFORE)
 	FailingExampleService failingService;
 
 	@Order(1)
@@ -87,15 +88,13 @@ public class MockitoBeanWithResetIntegrationTests {
 	}
 
 	static class FailingExampleServiceFactory implements FactoryBean<FailingExampleService> {
-		@Nullable
 		@Override
-		public FailingExampleService getObject() {
+		public @Nullable FailingExampleService getObject() {
 			return new FailingExampleService();
 		}
 
-		@Nullable
 		@Override
-		public Class<?> getObjectType() {
+		public @Nullable Class<?> getObjectType() {
 			return FailingExampleService.class;
 		}
 	}

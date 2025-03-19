@@ -24,10 +24,11 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
+import org.jspecify.annotations.Nullable;
+
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
-import org.springframework.lang.Nullable;
 import org.springframework.util.CollectionUtils;
 import org.springframework.util.LinkedCaseInsensitiveMap;
 import org.springframework.util.MultiValueMap;
@@ -57,7 +58,7 @@ class JdkClientHttpResponse implements ClientHttpResponse {
 
 	private static HttpHeaders adaptHeaders(HttpResponse<?> response) {
 		Map<String, List<String>> rawHeaders = response.headers().map();
-		Map<String, List<String>> map = new LinkedCaseInsensitiveMap<>(rawHeaders.size(), Locale.ENGLISH);
+		Map<String, List<String>> map = new LinkedCaseInsensitiveMap<>(rawHeaders.size(), Locale.ROOT);
 		MultiValueMap<String, String> multiValueMap = CollectionUtils.toMultiValueMap(map);
 		multiValueMap.putAll(rawHeaders);
 		return HttpHeaders.readOnlyHttpHeaders(multiValueMap);

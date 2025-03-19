@@ -29,6 +29,7 @@ import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
 import org.apache.commons.logging.LogFactory;
+import org.jspecify.annotations.Nullable;
 
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.ApplicationContextAware;
@@ -37,14 +38,12 @@ import org.springframework.context.SmartLifecycle;
 import org.springframework.context.event.ContextClosedEvent;
 import org.springframework.core.task.SimpleAsyncTaskExecutor;
 import org.springframework.core.task.TaskRejectedException;
-import org.springframework.lang.Nullable;
 import org.springframework.scheduling.TaskScheduler;
 import org.springframework.scheduling.Trigger;
 import org.springframework.scheduling.support.DelegatingErrorHandlingRunnable;
 import org.springframework.scheduling.support.TaskUtils;
 import org.springframework.util.Assert;
 import org.springframework.util.ErrorHandler;
-import org.springframework.util.concurrent.ListenableFuture;
 
 /**
  * A simple implementation of Spring's {@link TaskScheduler} interface, using
@@ -80,7 +79,9 @@ import org.springframework.util.concurrent.ListenableFuture;
  * but rather just the hand-off to an execution thread.</b> As a consequence,
  * a {@link ScheduledFuture} handle (for example, from {@link #schedule(Runnable, Instant)})
  * represents that hand-off rather than the actual completion of the provided task
- * (or series of repeated tasks).
+ * (or series of repeated tasks). Also, this scheduler participates in lifecycle
+ * management to a limited degree only, stopping trigger firing and fixed-delay
+ * task execution but not stopping the execution of handed-off tasks.
  *
  * <p>As an alternative to the built-in thread-per-task capability, this scheduler
  * can also be configured with a separate target executor for scheduled task
@@ -121,18 +122,15 @@ public class SimpleAsyncTaskScheduler extends SimpleAsyncTaskExecutor implements
 
 	private final ExecutorLifecycleDelegate fixedDelayLifecycle = new ExecutorLifecycleDelegate(this.fixedDelayExecutor);
 
-	@Nullable
-	private ErrorHandler errorHandler;
+	private @Nullable ErrorHandler errorHandler;
 
 	private Clock clock = Clock.systemDefaultZone();
 
 	private int phase = DEFAULT_PHASE;
 
-	@Nullable
-	private Executor targetTaskExecutor;
+	private @Nullable Executor targetTaskExecutor;
 
-	@Nullable
-	private ApplicationContext applicationContext;
+	private @Nullable ApplicationContext applicationContext;
 
 
 	/**
@@ -268,21 +266,8 @@ public class SimpleAsyncTaskScheduler extends SimpleAsyncTaskExecutor implements
 		return super.submit(new DelegatingErrorHandlingCallable<>(task, this.errorHandler));
 	}
 
-	@SuppressWarnings("deprecation")
 	@Override
-	public ListenableFuture<?> submitListenable(Runnable task) {
-		return super.submitListenable(TaskUtils.decorateTaskWithErrorHandler(task, this.errorHandler, false));
-	}
-
-	@SuppressWarnings("deprecation")
-	@Override
-	public <T> ListenableFuture<T> submitListenable(Callable<T> task) {
-		return super.submitListenable(new DelegatingErrorHandlingCallable<>(task, this.errorHandler));
-	}
-
-	@Override
-	@Nullable
-	public ScheduledFuture<?> schedule(Runnable task, Trigger trigger) {
+	public @Nullable ScheduledFuture<?> schedule(Runnable task, Trigger trigger) {
 		try {
 			Runnable delegate = scheduledTask(task);
 			ErrorHandler errorHandler =

@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2023 the original author or authors.
+ * Copyright 2002-2025 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,12 +25,12 @@ import org.hibernate.resource.beans.container.spi.BeanContainer;
 import org.hibernate.resource.beans.container.spi.ContainedBean;
 import org.hibernate.resource.beans.spi.BeanInstanceProducer;
 import org.hibernate.type.spi.TypeBootstrapContext;
+import org.jspecify.annotations.Nullable;
 
 import org.springframework.beans.BeansException;
 import org.springframework.beans.factory.BeanCreationException;
 import org.springframework.beans.factory.config.AutowireCapableBeanFactory;
 import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
-import org.springframework.lang.Nullable;
 import org.springframework.util.Assert;
 import org.springframework.util.ConcurrentReferenceHashMap;
 
@@ -243,8 +243,7 @@ public final class SpringBeanContainer implements BeanContainer {
 
 		private final B beanInstance;
 
-		@Nullable
-		private Consumer<B> destructionCallback;
+		private @Nullable Consumer<B> destructionCallback;
 
 		public SpringContainedBean(B beanInstance) {
 			this.beanInstance = beanInstance;
@@ -258,6 +257,12 @@ public final class SpringBeanContainer implements BeanContainer {
 		@Override
 		public B getBeanInstance() {
 			return this.beanInstance;
+		}
+
+		@Override
+		@SuppressWarnings("unchecked")
+		public Class<B> getBeanClass() {
+			return (Class<B>) this.beanInstance.getClass();
 		}
 
 		public void destroyIfNecessary() {

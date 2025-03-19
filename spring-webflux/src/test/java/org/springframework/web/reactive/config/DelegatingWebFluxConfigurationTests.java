@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2024 the original author or authors.
+ * Copyright 2002-2025 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -86,7 +86,8 @@ public class DelegatingWebFluxConfigurationTests {
 	@Test
 	void requestMappingHandlerMapping() {
 		delegatingConfig.setConfigurers(Collections.singletonList(webFluxConfigurer));
-		delegatingConfig.requestMappingHandlerMapping(delegatingConfig.webFluxContentTypeResolver());
+		delegatingConfig.requestMappingHandlerMapping(
+				delegatingConfig.webFluxContentTypeResolver(), delegatingConfig.mvcApiVersionStrategy());
 
 		verify(webFluxConfigurer).configureContentTypeResolver(any(RequestedContentTypeResolverBuilder.class));
 		verify(webFluxConfigurer).addCorsMappings(any(CorsRegistry.class));
@@ -116,7 +117,7 @@ public class DelegatingWebFluxConfigurationTests {
 		boolean condition = initializer.getValidator() instanceof LocalValidatorFactoryBean;
 		assertThat(condition).isTrue();
 		assertThat(initializer.getConversionService()).isSameAs(formatterRegistry.getValue());
-		assertThat(codecsConfigurer.getValue().getReaders()).hasSize(17);
+		assertThat(codecsConfigurer.getValue().getReaders()).hasSize(15);
 	}
 
 	@Test
@@ -124,7 +125,7 @@ public class DelegatingWebFluxConfigurationTests {
 		delegatingConfig.setConfigurers(Collections.singletonList(webFluxConfigurer));
 		willAnswer(invocation -> {
 			ResourceHandlerRegistry registry = invocation.getArgument(0);
-			registry.addResourceHandler("/static/**").addResourceLocations("classpath:/static");
+			registry.addResourceHandler("/static/**").addResourceLocations("classpath:/static/");
 			return null;
 		}).given(webFluxConfigurer).addResourceHandlers(any(ResourceHandlerRegistry.class));
 

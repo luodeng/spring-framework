@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2024 the original author or authors.
+ * Copyright 2002-2025 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -30,7 +30,8 @@ import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 
-import org.springframework.lang.Nullable;
+import org.jspecify.annotations.Nullable;
+
 import org.springframework.util.Assert;
 import org.springframework.util.ResourceUtils;
 import org.springframework.util.StringUtils;
@@ -53,8 +54,7 @@ public class UrlResource extends AbstractFileResolvingResource {
 	/**
 	 * Original URI, if available; used for URI and File access.
 	 */
-	@Nullable
-	private final URI uri;
+	private final @Nullable URI uri;
 
 	/**
 	 * Original URL, used for actual access.
@@ -64,8 +64,7 @@ public class UrlResource extends AbstractFileResolvingResource {
 	/**
 	 * Cleaned URL String (with normalized path), used for comparisons.
 	 */
-	@Nullable
-	private volatile String cleanedUrl;
+	private volatile @Nullable String cleanedUrl;
 
 
 	/**
@@ -234,8 +233,8 @@ public class UrlResource extends AbstractFileResolvingResource {
 		}
 		catch (IOException ex) {
 			// Close the HTTP connection (if applicable).
-			if (con instanceof HttpURLConnection httpConn) {
-				httpConn.disconnect();
+			if (con instanceof HttpURLConnection httpCon) {
+				httpCon.disconnect();
 			}
 			throw ex;
 		}
@@ -331,8 +330,7 @@ public class UrlResource extends AbstractFileResolvingResource {
 	 * @see java.net.URLDecoder#decode(String, java.nio.charset.Charset)
 	 */
 	@Override
-	@Nullable
-	public String getFilename() {
+	public @Nullable String getFilename() {
 		if (this.uri != null) {
 			String path = this.uri.getPath();
 			if (path != null) {

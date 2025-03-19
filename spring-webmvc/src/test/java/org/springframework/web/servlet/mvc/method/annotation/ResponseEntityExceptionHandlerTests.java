@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2024 the original author or authors.
+ * Copyright 2002-2025 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -69,12 +69,13 @@ import org.springframework.web.servlet.ModelAndView;
 import org.springframework.web.servlet.NoHandlerFoundException;
 import org.springframework.web.servlet.mvc.support.DefaultHandlerExceptionResolver;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
+import org.springframework.web.testfixture.http.MockHttpInputMessage;
 import org.springframework.web.testfixture.servlet.MockHttpServletRequest;
 import org.springframework.web.testfixture.servlet.MockHttpServletResponse;
 import org.springframework.web.testfixture.servlet.MockServletConfig;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.BDDMockito.mock;
+import static org.mockito.Mockito.mock;
 
 /**
  * Tests for {@link ResponseEntityExceptionHandler}.
@@ -107,6 +108,7 @@ class ResponseEntityExceptionHandlerTests {
 		Arrays.stream(DefaultHandlerExceptionResolver.class.getDeclaredMethods())
 				.filter(method -> method.getName().startsWith("handle") && (method.getParameterCount() == 4))
 				.filter(method -> !method.getName().equals("handleErrorResponse"))
+				.filter(method -> !method.getName().equals("handleDisconnectedClientException"))
 				.map(method -> method.getParameterTypes()[0])
 				.forEach(exceptionType -> assertThat(annotation.value())
 						.as("@ExceptionHandler is missing declaration for " + exceptionType.getName())
@@ -260,9 +262,8 @@ class ResponseEntityExceptionHandlerTests {
 	}
 
 	@Test
-	@SuppressWarnings("deprecation")
 	public void httpMessageNotReadable() {
-		testException(new HttpMessageNotReadableException("message"));
+		testException(new HttpMessageNotReadableException("message", new MockHttpInputMessage(new byte[0])));
 	}
 
 	@Test
@@ -300,7 +301,7 @@ class ResponseEntityExceptionHandlerTests {
 		ResponseEntity<Object> responseEntity =
 				testException(new NoHandlerFoundException("GET", "/resource", requestHeaders));
 
-		assertThat(responseEntity.getHeaders()).isEmpty();
+		assertThat(responseEntity.getHeaders().isEmpty()).isTrue();
 	}
 
 	@Test

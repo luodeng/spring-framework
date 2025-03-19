@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2024 the original author or authors.
+ * Copyright 2002-2025 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,6 +18,7 @@ package org.springframework.test.context.bean.override;
 
 import java.lang.reflect.Field;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Predicate;
@@ -25,9 +26,8 @@ import java.util.function.Predicate;
 import org.junit.jupiter.api.Test;
 
 import org.springframework.beans.BeanWrapper;
-import org.springframework.beans.factory.BeanCreationException;
 import org.springframework.beans.factory.FactoryBean;
-import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.NoUniqueBeanDefinitionException;
 import org.springframework.beans.factory.config.BeanDefinition;
 import org.springframework.beans.factory.config.BeanFactoryPostProcessor;
 import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
@@ -50,7 +50,7 @@ import static org.mockito.Mockito.mock;
 
 /**
  * Tests for {@link BeanOverrideBeanFactoryPostProcessor} combined with a
- * {@link BeanOverrideRegistrar}.
+ * {@link BeanOverrideRegistry}.
  *
  * @author Simon Baslé
  * @author Stephane Nicoll
@@ -59,8 +59,20 @@ import static org.mockito.Mockito.mock;
 class BeanOverrideBeanFactoryPostProcessorTests {
 
 	@Test
+	void beanNameWithFactoryBeanPrefixIsRejected() {
+		AnnotationConfigApplicationContext context = createContext(FactoryBeanPrefixTestCase.class);
+
+		assertThatIllegalStateException()
+				.isThrownBy(context::refresh)
+				.withMessage("""
+					Unable to override bean '&messageService' for field 'FactoryBeanPrefixTestCase.messageService': \
+					a FactoryBean cannot be overridden. To override the bean created by the FactoryBean, remove the \
+					'&' prefix.""");
+	}
+
+	@Test
 	void replaceBeanByNameWithMatchingBeanDefinition() {
-		AnnotationConfigApplicationContext context = createContext(CaseByName.class);
+		AnnotationConfigApplicationContext context = createContext(ByNameTestCase.class);
 		context.registerBean("descriptionBean", String.class, () -> "Original");
 		context.refresh();
 
@@ -69,23 +81,29 @@ class BeanOverrideBeanFactoryPostProcessorTests {
 
 	@Test
 	void replaceBeanByNameWithoutMatchingBeanDefinitionFails() {
-		AnnotationConfigApplicationContext context = createContext(CaseByName.class);
+		AnnotationConfigApplicationContext context = createContext(ByNameTestCase.class);
 
 		assertThatIllegalStateException()
 				.isThrownBy(context::refresh)
-				.withMessage("Unable to override bean: there is no bean definition " +
-						"to replace with name [descriptionBean] and type [java.lang.String].");
+				.withMessage("""
+						Unable to replace bean: there is no bean with name 'descriptionBean' \
+						and type java.lang.String (as required by field 'ByNameTestCase.description'). \
+						If the bean is defined in a @Bean method, make sure the return type is the most \
+						specific type possible (for example, the concrete implementation type).""");
 	}
 
 	@Test
 	void replaceBeanByNameWithMatchingBeanDefinitionAndWrongTypeFails() {
-		AnnotationConfigApplicationContext context = createContext(CaseByName.class);
+		AnnotationConfigApplicationContext context = createContext(ByNameTestCase.class);
 		context.registerBean("descriptionBean", Integer.class, () -> -1);
 
 		assertThatIllegalStateException()
 				.isThrownBy(context::refresh)
-				.withMessage("Unable to override bean: there is no bean definition " +
-						"to replace with name [descriptionBean] and type [java.lang.String].");
+				.withMessage("""
+						Unable to replace bean: there is no bean with name 'descriptionBean' \
+						and type java.lang.String (as required by field 'ByNameTestCase.description'). \
+						If the bean is defined in a @Bean method, make sure the return type is the most \
+						specific type possible (for example, the concrete implementation type).""");
 	}
 
 	@Test
@@ -105,7 +123,7 @@ class BeanOverrideBeanFactoryPostProcessorTests {
 	}
 
 	private AnnotationConfigApplicationContext prepareContextWithFactoryBean(Object objectTypeAttribute) {
-		AnnotationConfigApplicationContext context = createContext(CaseOverrideBeanProducedByFactoryBean.class);
+		AnnotationConfigApplicationContext context = createContext(OverrideBeanProducedByFactoryBeanTestCase.class);
 		// Register a TestFactoryBean that will not be overridden
 		context.registerBean("testFactoryBean", TestFactoryBean.class, TestFactoryBean::new);
 		// Register another TestFactoryBean that will be overridden
@@ -117,7 +135,7 @@ class BeanOverrideBeanFactoryPostProcessorTests {
 
 	@Test
 	void replaceBeanByTypeWithSingleMatchingBean() {
-		AnnotationConfigApplicationContext context = createContext(CaseByType.class);
+		AnnotationConfigApplicationContext context = createContext(ByTypeTestCase.class);
 		context.registerBean("someInteger", Integer.class, () -> 1);
 		context.refresh();
 
@@ -126,30 +144,34 @@ class BeanOverrideBeanFactoryPostProcessorTests {
 
 	@Test
 	void replaceBeanByTypeWithoutMatchingBeanFails() {
-		AnnotationConfigApplicationContext context = createContext(CaseByType.class);
+		AnnotationConfigApplicationContext context = createContext(ByTypeTestCase.class);
 
 		assertThatIllegalStateException()
 				.isThrownBy(context::refresh)
-				.withMessage("Unable to override bean: no bean definitions of type java.lang.Integer " +
-						"(as required by annotated field 'CaseByType.counter')");
+				.withMessage("""
+						Unable to override bean: there are no beans of type java.lang.Integer \
+						(as required by field 'ByTypeTestCase.counter'). \
+						If the bean is defined in a @Bean method, make sure the return type is the most \
+						specific type possible (for example, the concrete implementation type).""");
 	}
 
 	@Test
-	void replaceBeanByTypeWithMultipleMatchesAndNoQualifierFails() {
-		AnnotationConfigApplicationContext context = createContext(CaseByType.class);
+	void replaceBeanByTypeWithMultipleCandidatesAndNoQualifierFails() {
+		AnnotationConfigApplicationContext context = createContext(ByTypeTestCase.class);
 		context.registerBean("someInteger", Integer.class, () -> 1);
 		context.registerBean("anotherInteger", Integer.class, () -> 2);
 
 		assertThatIllegalStateException()
 				.isThrownBy(context::refresh)
-				.withMessage("Unable to select a bean definition to override: found 2 bean definitions " +
-						"of type java.lang.Integer (as required by annotated field 'CaseByType.counter'): " +
-						"[someInteger, anotherInteger]");
+				.withMessage("""
+						Unable to select a bean to override: found 2 beans of type java.lang.Integer \
+						(as required by field 'ByTypeTestCase.counter'): %s""",
+						List.of("someInteger", "anotherInteger"));
 	}
 
 	@Test
-	void replaceBeanByTypeWithMultipleMatchesAndFieldNameAsFallbackQualifierMatches() {
-		AnnotationConfigApplicationContext context = createContext(CaseByType.class);
+	void replaceBeanByTypeWithMultipleCandidatesAndFieldNameAsFallbackQualifier() {
+		AnnotationConfigApplicationContext context = createContext(ByTypeTestCase.class);
 		context.registerBean("counter", Integer.class, () -> 1);
 		context.registerBean("someInteger", Integer.class, () -> 2);
 		context.refresh();
@@ -157,9 +179,44 @@ class BeanOverrideBeanFactoryPostProcessorTests {
 		assertThat(context.getBean("counter")).isSameAs(42);
 	}
 
+	@Test  // gh-33819
+	void replaceBeanByTypeWithMultipleCandidatesAndOnePrimary() {
+		AnnotationConfigApplicationContext context = createContext(TestBeanByTypeTestCase.class);
+		context.registerBean("description1", String.class, () -> "one");
+		RootBeanDefinition beanDefinition2 = new RootBeanDefinition(String.class);
+		beanDefinition2.getConstructorArgumentValues().addIndexedArgumentValue(0, "two");
+		beanDefinition2.setPrimary(true);
+		context.registerBeanDefinition("description2", beanDefinition2);
+		context.refresh();
+
+		assertThat(context.getBean("description1", String.class)).isEqualTo("one");
+		assertThat(context.getBean("description2", String.class)).isEqualTo("overridden");
+		assertThat(context.getBean(String.class)).isEqualTo("overridden");
+	}
+
+	@Test  // gh-33819
+	void replaceBeanByTypeWithMultipleCandidatesAndMultiplePrimaryBeansFails() {
+		AnnotationConfigApplicationContext context = createContext(TestBeanByTypeTestCase.class);
+
+		RootBeanDefinition beanDefinition1 = new RootBeanDefinition(String.class);
+		beanDefinition1.getConstructorArgumentValues().addIndexedArgumentValue(0, "one");
+		beanDefinition1.setPrimary(true);
+		context.registerBeanDefinition("description1", beanDefinition1);
+
+		RootBeanDefinition beanDefinition2 = new RootBeanDefinition(String.class);
+		beanDefinition2.getConstructorArgumentValues().addIndexedArgumentValue(0, "two");
+		beanDefinition2.setPrimary(true);
+		context.registerBeanDefinition("description2", beanDefinition2);
+
+		assertThatExceptionOfType(NoUniqueBeanDefinitionException.class)
+				.isThrownBy(context::refresh)
+				.withMessage("No qualifying bean of type 'java.lang.String' available: " +
+						"more than one 'primary' bean found among candidates: [description1, description2]");
+	}
+
 	@Test
 	void createOrReplaceBeanByNameWithMatchingBeanDefinition() {
-		AnnotationConfigApplicationContext context = createContext(CaseByNameWithReplaceOrCreateStrategy.class);
+		AnnotationConfigApplicationContext context = createContext(ByNameWithReplaceOrCreateStrategyTestCase.class);
 		context.registerBean("descriptionBean", String.class, () -> "Original");
 		context.refresh();
 
@@ -168,7 +225,7 @@ class BeanOverrideBeanFactoryPostProcessorTests {
 
 	@Test
 	void createOrReplaceBeanByNameWithoutMatchingDefinitionCreatesBeanDefinition() {
-		AnnotationConfigApplicationContext context = createContext(CaseByNameWithReplaceOrCreateStrategy.class);
+		AnnotationConfigApplicationContext context = createContext(ByNameWithReplaceOrCreateStrategyTestCase.class);
 		context.refresh();
 
 		assertThat(context.getBean("descriptionBean")).isEqualTo("overridden");
@@ -176,7 +233,7 @@ class BeanOverrideBeanFactoryPostProcessorTests {
 
 	@Test
 	void createOrReplaceBeanByTypeWithMatchingBean() {
-		AnnotationConfigApplicationContext context = createContext(CaseByTypeWithReplaceOrCreateStrategy.class);
+		AnnotationConfigApplicationContext context = createContext(ByTypeWithReplaceOrCreateStrategyTestCase.class);
 		context.registerBean("someBean", String.class, () -> "Original");
 		context.refresh();
 
@@ -185,7 +242,7 @@ class BeanOverrideBeanFactoryPostProcessorTests {
 
 	@Test
 	void createOrReplaceBeanByTypeWithoutMatchingDefinitionCreatesBeanDefinition() {
-		AnnotationConfigApplicationContext context = createContext(CaseByTypeWithReplaceOrCreateStrategy.class);
+		AnnotationConfigApplicationContext context = createContext(ByTypeWithReplaceOrCreateStrategyTestCase.class);
 		context.refresh();
 
 		String generatedBeanName = "java.lang.String#0";
@@ -195,7 +252,7 @@ class BeanOverrideBeanFactoryPostProcessorTests {
 
 	@Test
 	void postProcessorShouldNotTriggerEarlyInitialization() {
-		AnnotationConfigApplicationContext context = createContext(CaseByTypeWithReplaceOrCreateStrategy.class);
+		AnnotationConfigApplicationContext context = createContext(ByTypeWithReplaceOrCreateStrategyTestCase.class);
 
 		context.register(FactoryBeanRegisteringPostProcessor.class);
 		context.register(EarlyBeanInitializationDetector.class);
@@ -205,7 +262,7 @@ class BeanOverrideBeanFactoryPostProcessorTests {
 
 	@Test
 	void replaceBeanByNameWithMatchingBeanDefinitionWithExplicitSingletonScope() {
-		AnnotationConfigApplicationContext context = createContext(CaseByName.class);
+		AnnotationConfigApplicationContext context = createContext(ByNameTestCase.class);
 		RootBeanDefinition definition = new RootBeanDefinition(String.class, () -> "ORIGINAL");
 		definition.setScope(BeanDefinition.SCOPE_SINGLETON);
 		context.registerBeanDefinition("descriptionBean", definition);
@@ -218,7 +275,7 @@ class BeanOverrideBeanFactoryPostProcessorTests {
 	@Test
 	void replaceBeanByNameWithMatchingBeanDefinitionForClassBasedSingletonFactoryBean() {
 		String beanName = "descriptionBean";
-		AnnotationConfigApplicationContext context = createContext(CaseByName.class);
+		AnnotationConfigApplicationContext context = createContext(ByNameTestCase.class);
 		RootBeanDefinition factoryBeanDefinition = new RootBeanDefinition(SingletonStringFactoryBean.class);
 		context.registerBeanDefinition(beanName, factoryBeanDefinition);
 
@@ -227,16 +284,14 @@ class BeanOverrideBeanFactoryPostProcessorTests {
 		assertThat(context.getBean(beanName)).isEqualTo("overridden");
 	}
 
-	@Test
+	@Test  // gh-33800
 	void replaceBeanByNameWithMatchingBeanDefinitionForClassBasedNonSingletonFactoryBean() {
 		String beanName = "descriptionBean";
-		AnnotationConfigApplicationContext context = createContext(CaseByName.class);
+		AnnotationConfigApplicationContext context = createContext(ByNameTestCase.class);
 		RootBeanDefinition factoryBeanDefinition = new RootBeanDefinition(NonSingletonStringFactoryBean.class);
 		context.registerBeanDefinition(beanName, factoryBeanDefinition);
 
 		assertThatNoException().isThrownBy(context::refresh);
-		// Even though the FactoryBean signals it does not manage a singleton,
-		// the Bean Override support currently replaces it with a singleton.
 		assertThat(context.isSingleton(beanName)).as("isSingleton").isTrue();
 		assertThat(context.getBean(beanName)).isEqualTo("overridden");
 	}
@@ -253,7 +308,7 @@ class BeanOverrideBeanFactoryPostProcessorTests {
 		assertThat(context.getBean(beanName, MessageService.class).getMessage()).isEqualTo("overridden");
 	}
 
-	@Test
+	@Test  // gh-33800
 	void replaceBeanByNameWithMatchingBeanDefinitionForInterfaceBasedNonSingletonFactoryBean() {
 		String beanName = "messageServiceBean";
 		AnnotationConfigApplicationContext context = createContext(MessageServiceTestCase.class);
@@ -261,108 +316,74 @@ class BeanOverrideBeanFactoryPostProcessorTests {
 		context.registerBeanDefinition(beanName, factoryBeanDefinition);
 
 		assertThatNoException().isThrownBy(context::refresh);
-		// Even though the FactoryBean signals it does not manage a singleton,
-		// the Bean Override support currently replaces it with a singleton.
 		assertThat(context.isSingleton(beanName)).as("isSingleton").isTrue();
 		assertThat(context.getBean(beanName, MessageService.class).getMessage()).isEqualTo("overridden");
 	}
 
 	@Test
-	void replaceBeanByNameWithMatchingBeanDefinitionWithPrototypeScope() {
+	void replaceBeanByNameWithMatchingBeanDefinitionWithPrototypeScopeFails() {
 		String beanName = "descriptionBean";
 
-		AnnotationConfigApplicationContext context = createContext(CaseByName.class);
+		AnnotationConfigApplicationContext context = createContext(ByNameTestCase.class);
 		RootBeanDefinition definition = new RootBeanDefinition(String.class, () -> "ORIGINAL");
 		definition.setScope(BeanDefinition.SCOPE_PROTOTYPE);
 		context.registerBeanDefinition(beanName, definition);
 
-		assertThatNoException().isThrownBy(context::refresh);
-		// The Bean Override support currently creates a "dummy" BeanDefinition that
-		// retains the prototype scope of the original BeanDefinition.
-		assertThat(context.isSingleton(beanName)).as("isSingleton").isFalse();
-		assertThat(context.isPrototype(beanName)).as("isPrototype").isTrue();
-		// Since the "dummy" BeanDefinition has prototype scope, a manual singleton
-		// is not registered, and the "dummy" BeanDefinition is used to create a
-		// new java.lang.String using the default constructor, which results in an
-		// empty string instead of "overridden". In other words, the bean is not
-		// actually overridden as expected, and no exception is thrown which
-		// silently masks the issue.
-		assertThat(context.getBean(beanName)).isEqualTo("");
+		assertThatIllegalStateException()
+				.isThrownBy(context::refresh)
+				.withMessage("Unable to override bean 'descriptionBean': only singleton beans can be overridden.");
 	}
 
 	@Test
-	void replaceBeanByNameWithMatchingBeanDefinitionWithCustomScope() {
+	void replaceBeanByNameWithMatchingBeanDefinitionWithCustomScopeFails() {
 		String beanName = "descriptionBean";
 		String scope = "customScope";
 
-		AnnotationConfigApplicationContext context = createContext(CaseByName.class);
+		AnnotationConfigApplicationContext context = createContext(ByNameTestCase.class);
 		ConfigurableListableBeanFactory beanFactory = context.getBeanFactory();
 		beanFactory.registerScope(scope, new SimpleThreadScope());
 		RootBeanDefinition definition = new RootBeanDefinition(String.class, () -> "ORIGINAL");
 		definition.setScope(scope);
 		context.registerBeanDefinition(beanName, definition);
 
-		assertThatNoException().isThrownBy(context::refresh);
-		// The Bean Override support currently creates a "dummy" BeanDefinition that
-		// retains the custom scope of the original BeanDefinition.
-		assertThat(context.isSingleton(beanName)).as("isSingleton").isFalse();
-		assertThat(context.isPrototype(beanName)).as("isPrototype").isFalse();
-		assertThat(beanFactory.getBeanDefinition(beanName).getScope()).isEqualTo(scope);
-		// Since the "dummy" BeanDefinition has a custom scope, a manual singleton
-		// is not registered, and the "dummy" BeanDefinition is used to create a
-		// new java.lang.String using the default constructor, which results in an
-		// empty string instead of "overridden". In other words, the bean is not
-		// actually overridden as expected, and no exception is thrown which
-		// silently masks the issue.
-		assertThat(context.getBean(beanName)).isEqualTo("");
+		assertThatIllegalStateException()
+				.isThrownBy(context::refresh)
+				.withMessage("Unable to override bean 'descriptionBean': only singleton beans can be overridden.");
 	}
 
 	@Test
-	void replaceBeanByNameWithMatchingBeanDefinitionForPrototypeScopedFactoryBean() {
+	void replaceBeanByNameWithMatchingBeanDefinitionForPrototypeScopedFactoryBeanFails() {
 		String beanName = "messageServiceBean";
 		AnnotationConfigApplicationContext context = createContext(MessageServiceTestCase.class);
 		RootBeanDefinition factoryBeanDefinition = new RootBeanDefinition(SingletonMessageServiceFactoryBean.class);
 		factoryBeanDefinition.setScope(BeanDefinition.SCOPE_PROTOTYPE);
 		context.registerBeanDefinition(beanName, factoryBeanDefinition);
 
-		assertThatNoException().isThrownBy(context::refresh);
-		// The Bean Override support currently creates a "dummy" BeanDefinition that
-		// retains the prototype scope of the original BeanDefinition.
-		assertThat(context.isSingleton(beanName)).as("isSingleton").isFalse();
-		assertThat(context.isPrototype(beanName)).as("isPrototype").isTrue();
-		// Since the "dummy" BeanDefinition has prototype scope, a manual singleton
-		// is not registered, and the "dummy" BeanDefinition is used to create a
-		// new MessageService using the default constructor, which results in an
-		// error since MessageService is an interface.
-		assertThatExceptionOfType(BeanCreationException.class)
-				.isThrownBy(() -> context.getBean(beanName))
-				.withMessageContaining("Specified class is an interface");
+		assertThatIllegalStateException()
+				.isThrownBy(context::refresh)
+				.withMessage("Unable to override bean 'messageServiceBean': only singleton beans can be overridden.");
 	}
 
 	@Test
-	void replaceBeanByNameWithMatchingBeanDefinitionRetainsPrimaryFallbackAndScopeProperties() {
-		AnnotationConfigApplicationContext context = createContext(CaseByName.class);
-		context.getBeanFactory().registerScope("customScope", new SimpleThreadScope());
+	void replaceBeanByNameWithMatchingBeanDefinitionRetainsPrimaryAndFallbackFlags() {
+		AnnotationConfigApplicationContext context = createContext(ByNameTestCase.class);
 		RootBeanDefinition definition = new RootBeanDefinition(String.class, () -> "ORIGINAL");
-		definition.setScope("customScope");
 		definition.setPrimary(true);
 		definition.setFallback(true);
 		context.registerBeanDefinition("descriptionBean", definition);
 
 		assertThatNoException().isThrownBy(context::refresh);
 		assertThat(context.getBeanDefinition("descriptionBean"))
-				.isNotSameAs(definition)
 				.matches(BeanDefinition::isPrimary, "isPrimary")
 				.matches(BeanDefinition::isFallback, "isFallback")
-				.satisfies(d -> assertThat(d.getScope()).isEqualTo("customScope"))
-				.matches(Predicate.not(BeanDefinition::isSingleton), "!isSingleton")
+				.satisfies(d -> assertThat(d.getScope()).isEqualTo(""))
+				.matches(BeanDefinition::isSingleton, "isSingleton")
 				.matches(Predicate.not(BeanDefinition::isPrototype), "!isPrototype");
 	}
 
 	@Test
-	void qualifiedElementIsSetToBeanOverrideField() {
-		AnnotationConfigApplicationContext context = createContext(CaseByNameWithQualifier.class);
-		context.registerBeanDefinition("descriptionBean", new RootBeanDefinition(String.class, () -> "ORIGINAL"));
+	void qualifiedElementIsSetToBeanOverrideFieldForNonexistentBeanDefinition() {
+		AnnotationConfigApplicationContext context = createContext(TestBeanByNameTestCase.class);
 
 		assertThatNoException().isThrownBy(context::refresh);
 		assertThat(context.getBeanDefinition("descriptionBean"))
@@ -373,70 +394,94 @@ class BeanOverrideBeanFactoryPostProcessorTests {
 	private void qualifiedElementIsField(RootBeanDefinition def) {
 		assertThat(def.getQualifiedElement()).isInstanceOfSatisfying(Field.class,
 			field -> {
-				assertThat(field.getDeclaringClass()).isEqualTo(CaseByNameWithQualifier.class);
+				assertThat(field.getDeclaringClass()).isEqualTo(TestBeanByNameTestCase.class);
 				assertThat(field.getName()).as("annotated field name").isEqualTo("description");
 			});
 	}
 
-	private AnnotationConfigApplicationContext createContext(Class<?> testClass) {
+	private static AnnotationConfigApplicationContext createContext(Class<?> testClass) {
 		AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext();
-		Set<OverrideMetadata> metadata = new LinkedHashSet<>(OverrideMetadata.forTestClass(testClass));
-		new BeanOverrideContextCustomizer(metadata).customizeContext(context, mock(MergedContextConfiguration.class));
+		Set<BeanOverrideHandler> handlers = new LinkedHashSet<>(BeanOverrideTestUtils.findHandlers(testClass));
+		new BeanOverrideContextCustomizer(handlers).customizeContext(context, mock(MergedContextConfiguration.class));
 		return context;
 	}
 
 
-	static class CaseByName {
+	@FunctionalInterface
+	interface MessageService {
+		String getMessage();
+	}
+
+	static class FactoryBeanPrefixTestCase {
+
+		@DummyBean(beanName = "&messageService")
+		MessageService messageService;
+
+	}
+
+	static class ByNameTestCase {
 
 		@DummyBean(beanName = "descriptionBean")
 		private String description;
 
 	}
 
-	static class CaseByType {
+	static class ByTypeTestCase {
 
 		@DummyBean
 		private Integer counter;
 
 	}
 
-	static class CaseByNameWithReplaceOrCreateStrategy {
+	static class ByNameWithReplaceOrCreateStrategyTestCase {
 
-		@DummyBean(beanName = "descriptionBean", strategy = BeanOverrideStrategy.REPLACE_OR_CREATE_DEFINITION)
+		@DummyBean(beanName = "descriptionBean", strategy = BeanOverrideStrategy.REPLACE_OR_CREATE)
 		private String description;
 
 	}
 
-	static class CaseByTypeWithReplaceOrCreateStrategy {
+	static class ByTypeWithReplaceOrCreateStrategyTestCase {
 
-		@DummyBean(strategy = BeanOverrideStrategy.REPLACE_OR_CREATE_DEFINITION)
+		@DummyBean(strategy = BeanOverrideStrategy.REPLACE_OR_CREATE)
 		private String description;
 
 	}
 
-	static class CaseByNameAndByTypeWithReplaceOrCreateStrategy {
+	static class ByNameAndByTypeWithReplaceOrCreateStrategyTestCase {
 
-		@DummyBean(beanName = "descriptionBean", strategy = BeanOverrideStrategy.REPLACE_OR_CREATE_DEFINITION)
+		@DummyBean(beanName = "descriptionBean", strategy = BeanOverrideStrategy.REPLACE_OR_CREATE)
 		private String description;
 
-		@DummyBean(strategy = BeanOverrideStrategy.REPLACE_OR_CREATE_DEFINITION)
+		@DummyBean(strategy = BeanOverrideStrategy.REPLACE_OR_CREATE)
 		private Integer counter;
 
 	}
 
-	static class CaseOverrideBeanProducedByFactoryBean {
+	static class OverrideBeanProducedByFactoryBeanTestCase {
 
 		@DummyBean(beanName = "beanToBeOverridden")
 		CharSequence description;
 
 	}
 
-	static class CaseByNameWithQualifier {
+	static class TestBeanByNameTestCase {
 
-		@Qualifier("preferThis")
-		@DummyBean(beanName = "descriptionBean")
-		private String description;
+		@TestBean(name = "descriptionBean")
+		String description;
 
+		static String descriptionBean() {
+			return "overridden";
+		}
+	}
+
+	static class TestBeanByTypeTestCase {
+
+		@TestBean
+		String description;
+
+		static String description() {
+			return "overridden";
+		}
 	}
 
 	static class TestFactoryBean implements FactoryBean<Object> {
@@ -497,11 +542,6 @@ class BeanOverrideBeanFactoryPostProcessorTests {
 		public boolean isSingleton() {
 			return false;
 		}
-	}
-
-	@FunctionalInterface
-	interface MessageService {
-		String getMessage();
 	}
 
 	static class MessageServiceTestCase {

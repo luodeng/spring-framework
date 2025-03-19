@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2024 the original author or authors.
+ * Copyright 2002-2025 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -27,6 +27,8 @@ import java.util.Map;
 import java.util.function.Predicate;
 import java.util.stream.Stream;
 
+import org.jspecify.annotations.Nullable;
+
 import org.springframework.context.EmbeddedValueResolverAware;
 import org.springframework.core.annotation.AnnotatedElementUtils;
 import org.springframework.core.annotation.MergedAnnotation;
@@ -34,7 +36,6 @@ import org.springframework.core.annotation.MergedAnnotationPredicates;
 import org.springframework.core.annotation.MergedAnnotations;
 import org.springframework.core.annotation.MergedAnnotations.SearchStrategy;
 import org.springframework.core.annotation.RepeatableContainers;
-import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Controller;
 import org.springframework.util.Assert;
 import org.springframework.util.CollectionUtils;
@@ -46,6 +47,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.method.HandlerMethod;
+import org.springframework.web.reactive.accept.ApiVersionStrategy;
+import org.springframework.web.reactive.accept.DefaultApiVersionStrategy;
 import org.springframework.web.reactive.accept.RequestedContentTypeResolver;
 import org.springframework.web.reactive.accept.RequestedContentTypeResolverBuilder;
 import org.springframework.web.reactive.result.condition.ConsumesRequestCondition;
@@ -77,8 +80,9 @@ public class RequestMappingHandlerMapping extends RequestMappingInfoHandlerMappi
 
 	private RequestedContentTypeResolver contentTypeResolver = new RequestedContentTypeResolverBuilder().build();
 
-	@Nullable
-	private StringValueResolver embeddedValueResolver;
+	private @Nullable ApiVersionStrategy apiVersionStrategy;
+
+	private @Nullable StringValueResolver embeddedValueResolver;
 
 	private RequestMappingInfo.BuilderConfiguration config = new RequestMappingInfo.BuilderConfiguration();
 
@@ -126,6 +130,23 @@ public class RequestMappingHandlerMapping extends RequestMappingInfoHandlerMappi
 		return this.contentTypeResolver;
 	}
 
+	/**
+	 * Configure a strategy to manage API versioning.
+	 * @param strategy the strategy to use
+	 * @since 7.0
+	 */
+	public void setApiVersionStrategy(@Nullable ApiVersionStrategy strategy) {
+		this.apiVersionStrategy = strategy;
+	}
+
+	/**
+	 * Return the configured {@link ApiVersionStrategy} strategy.
+	 * @since 7.0
+	 */
+	public @Nullable ApiVersionStrategy getApiVersionStrategy() {
+		return this.apiVersionStrategy;
+	}
+
 	@Override
 	public void setEmbeddedValueResolver(StringValueResolver resolver) {
 		this.embeddedValueResolver = resolver;
@@ -136,6 +157,7 @@ public class RequestMappingHandlerMapping extends RequestMappingInfoHandlerMappi
 		this.config = new RequestMappingInfo.BuilderConfiguration();
 		this.config.setPatternParser(getPathPatternParser());
 		this.config.setContentTypeResolver(getContentTypeResolver());
+		this.config.setApiVersionStrategy(getApiVersionStrategy());
 
 		super.afterPropertiesSet();
 	}
@@ -160,8 +182,7 @@ public class RequestMappingHandlerMapping extends RequestMappingInfoHandlerMappi
 	 * @see #getCustomTypeCondition(Class)
 	 */
 	@Override
-	@Nullable
-	protected RequestMappingInfo getMappingForMethod(Method method, Class<?> handlerType) {
+	protected @Nullable RequestMappingInfo getMappingForMethod(Method method, Class<?> handlerType) {
 		RequestMappingInfo info = createRequestMappingInfo(method);
 		if (info != null) {
 			RequestMappingInfo typeInfo = createRequestMappingInfo(handlerType);
@@ -186,8 +207,7 @@ public class RequestMappingHandlerMapping extends RequestMappingInfoHandlerMappi
 		return info;
 	}
 
-	@Nullable
-	private RequestMappingInfo createRequestMappingInfo(AnnotatedElement element) {
+	private @Nullable RequestMappingInfo createRequestMappingInfo(AnnotatedElement element) {
 		RequestMappingInfo requestMappingInfo = null;
 		RequestCondition<?> customCondition = (element instanceof Class<?> clazz ?
 				getCustomTypeCondition(clazz) : getCustomMethodCondition((Method) element));
@@ -216,6 +236,13 @@ public class RequestMappingHandlerMapping extends RequestMappingInfoHandlerMappi
 			requestMappingInfo = createRequestMappingInfo((HttpExchange) httpExchanges.get(0).annotation, customCondition);
 		}
 
+		if (requestMappingInfo != null && this.apiVersionStrategy instanceof DefaultApiVersionStrategy davs) {
+			String version = requestMappingInfo.getVersionCondition().getVersion();
+			if (version != null) {
+				davs.addSupportedVersion(version);
+			}
+		}
+
 		return requestMappingInfo;
 	}
 
@@ -233,8 +260,7 @@ public class RequestMappingHandlerMapping extends RequestMappingInfoHandlerMappi
 	 * @return the condition, or {@code null}
 	 */
 	@SuppressWarnings("UnusedParameters")
-	@Nullable
-	protected RequestCondition<?> getCustomTypeCondition(Class<?> handlerType) {
+	protected @Nullable RequestCondition<?> getCustomTypeCondition(Class<?> handlerType) {
 		return null;
 	}
 
@@ -252,8 +278,7 @@ public class RequestMappingHandlerMapping extends RequestMappingInfoHandlerMappi
 	 * @return the condition, or {@code null}
 	 */
 	@SuppressWarnings("UnusedParameters")
-	@Nullable
-	protected RequestCondition<?> getCustomMethodCondition(Method method) {
+	protected @Nullable RequestCondition<?> getCustomMethodCondition(Method method) {
 		return null;
 	}
 
@@ -273,6 +298,7 @@ public class RequestMappingHandlerMapping extends RequestMappingInfoHandlerMappi
 				.headers(requestMapping.headers())
 				.consumes(requestMapping.consumes())
 				.produces(requestMapping.produces())
+				.version(requestMapping.version())
 				.mappingName(requestMapping.name());
 
 		if (customCondition != null) {
@@ -310,12 +336,12 @@ public class RequestMappingHandlerMapping extends RequestMappingInfoHandlerMappi
 	 * Resolve placeholder values in the given array of patterns.
 	 * @return a new array with updated patterns
 	 */
-	protected String[] resolveEmbeddedValuesInPatterns(String[] patterns) {
+	protected @Nullable String[] resolveEmbeddedValuesInPatterns(String[] patterns) {
 		if (this.embeddedValueResolver == null) {
 			return patterns;
 		}
 		else {
-			String[] resolvedPatterns = new String[patterns.length];
+			@Nullable String[] resolvedPatterns = new String[patterns.length];
 			for (int i = 0; i < patterns.length; i++) {
 				resolvedPatterns[i] = this.embeddedValueResolver.resolveStringValue(patterns[i]);
 			}
@@ -358,8 +384,7 @@ public class RequestMappingHandlerMapping extends RequestMappingInfoHandlerMappi
 	}
 
 	@Override
-	@Nullable
-	protected CorsConfiguration initCorsConfiguration(Object handler, Method method, RequestMappingInfo mappingInfo) {
+	protected @Nullable CorsConfiguration initCorsConfiguration(Object handler, Method method, RequestMappingInfo mappingInfo) {
 		HandlerMethod handlerMethod = createHandlerMethod(handler, method);
 		Class<?> beanType = handlerMethod.getBeanType();
 		CrossOrigin typeAnnotation = AnnotatedElementUtils.findMergedAnnotation(beanType, CrossOrigin.class);

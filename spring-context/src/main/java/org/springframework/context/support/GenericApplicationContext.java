@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2024 the original author or authors.
+ * Copyright 2002-2025 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,11 +23,14 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Supplier;
 
+import org.jspecify.annotations.Nullable;
+
 import org.springframework.aot.hint.RuntimeHints;
 import org.springframework.aot.hint.support.ClassHintUtils;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.BeansException;
 import org.springframework.beans.factory.BeanDefinitionStoreException;
+import org.springframework.beans.factory.BeanRegistrar;
 import org.springframework.beans.factory.NoSuchBeanDefinitionException;
 import org.springframework.beans.factory.config.AutowireCapableBeanFactory;
 import org.springframework.beans.factory.config.BeanDefinition;
@@ -36,6 +39,7 @@ import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
 import org.springframework.beans.factory.config.SmartInstantiationAwareBeanPostProcessor;
 import org.springframework.beans.factory.support.BeanDefinitionRegistry;
 import org.springframework.beans.factory.support.BeanDefinitionRegistryPostProcessor;
+import org.springframework.beans.factory.support.BeanRegistryAdapter;
 import org.springframework.beans.factory.support.DefaultListableBeanFactory;
 import org.springframework.beans.factory.support.MergedBeanDefinitionPostProcessor;
 import org.springframework.beans.factory.support.RootBeanDefinition;
@@ -45,7 +49,6 @@ import org.springframework.core.io.Resource;
 import org.springframework.core.io.ResourceLoader;
 import org.springframework.core.io.support.ResourcePatternResolver;
 import org.springframework.core.metrics.ApplicationStartup;
-import org.springframework.lang.Nullable;
 import org.springframework.util.Assert;
 
 /**
@@ -107,8 +110,7 @@ public class GenericApplicationContext extends AbstractApplicationContext implem
 
 	private final DefaultListableBeanFactory beanFactory;
 
-	@Nullable
-	private ResourceLoader resourceLoader;
+	private @Nullable ResourceLoader resourceLoader;
 
 	private boolean customClassLoader = false;
 
@@ -270,8 +272,7 @@ public class GenericApplicationContext extends AbstractApplicationContext implem
 	}
 
 	@Override
-	@Nullable
-	public ClassLoader getClassLoader() {
+	public @Nullable ClassLoader getClassLoader() {
 		if (this.resourceLoader != null && !this.customClassLoader) {
 			return this.resourceLoader.getClassLoader();
 		}
@@ -425,25 +426,37 @@ public class GenericApplicationContext extends AbstractApplicationContext implem
 	 * @see SmartInstantiationAwareBeanPostProcessor#determineBeanType
 	 */
 	private void preDetermineBeanTypes(RuntimeHints runtimeHints) {
+		List<String> singletons = new ArrayList<>();
+		List<String> lazyBeans = new ArrayList<>();
+
+		// First round: pre-registered singleton instances, if any.
+		for (String beanName : this.beanFactory.getSingletonNames()) {
+			Class<?> beanType = this.beanFactory.getType(beanName);
+			if (beanType != null) {
+				ClassHintUtils.registerProxyIfNecessary(beanType, runtimeHints);
+			}
+			singletons.add(beanName);
+		}
+
 		List<SmartInstantiationAwareBeanPostProcessor> bpps =
 				PostProcessorRegistrationDelegate.loadBeanPostProcessors(
 						this.beanFactory, SmartInstantiationAwareBeanPostProcessor.class);
 
-		List<String> lazyBeans = new ArrayList<>();
-
-		// First round: non-lazy singleton beans in definition order,
+		// Second round: non-lazy singleton beans in definition order,
 		// matching preInstantiateSingletons.
 		for (String beanName : this.beanFactory.getBeanDefinitionNames()) {
-			BeanDefinition bd = getBeanDefinition(beanName);
-			if (bd.isSingleton() && !bd.isLazyInit()) {
-				preDetermineBeanType(beanName, bpps, runtimeHints);
-			}
-			else {
-				lazyBeans.add(beanName);
+			if (!singletons.contains(beanName)) {
+				BeanDefinition bd = getBeanDefinition(beanName);
+				if (bd.isSingleton() && !bd.isLazyInit()) {
+					preDetermineBeanType(beanName, bpps, runtimeHints);
+				}
+				else {
+					lazyBeans.add(beanName);
+				}
 			}
 		}
 
-		// Second round: lazy singleton beans and scoped beans.
+		// Third round: lazy singleton beans and scoped beans.
 		for (String beanName : lazyBeans) {
 			preDetermineBeanType(beanName, bpps, runtimeHints);
 		}
@@ -480,7 +493,7 @@ public class GenericApplicationContext extends AbstractApplicationContext implem
 	 * (may be {@code null} or empty)
 	 * @since 5.2 (since 5.0 on the AnnotationConfigApplicationContext subclass)
 	 */
-	public <T> void registerBean(Class<T> beanClass, Object... constructorArgs) {
+	public <T> void registerBean(Class<T> beanClass, @Nullable Object... constructorArgs) {
 		registerBean(null, beanClass, constructorArgs);
 	}
 
@@ -495,7 +508,7 @@ public class GenericApplicationContext extends AbstractApplicationContext implem
 	 * (may be {@code null} or empty)
 	 * @since 5.2 (since 5.0 on the AnnotationConfigApplicationContext subclass)
 	 */
-	public <T> void registerBean(@Nullable String beanName, Class<T> beanClass, Object... constructorArgs) {
+	public <T> void registerBean(@Nullable String beanName, Class<T> beanClass, @Nullable Object... constructorArgs) {
 		registerBean(beanName, beanClass, (Supplier<T>) null,
 				bd -> {
 					for (Object arg : constructorArgs) {
@@ -583,6 +596,21 @@ public class GenericApplicationContext extends AbstractApplicationContext implem
 		registerBeanDefinition(nameToUse, beanDefinition);
 	}
 
+	/**
+	 * Invoke the given registrars for registering their beans with this
+	 * application context.
+	 * <p>This can be used to apply encapsulated pieces of programmatic
+	 * bean registration to this application context without relying on
+	 * individual calls to its context-level {@code registerBean} methods.
+	 * @param registrars one or more {@link BeanRegistrar} instances
+	 * @since 7.0
+	 */
+	public void register(BeanRegistrar... registrars) {
+		for (BeanRegistrar registrar : registrars) {
+			new BeanRegistryAdapter(this.beanFactory, getEnvironment(), registrar.getClass()).register(registrar);
+		}
+	}
+
 
 	/**
 	 * {@link RootBeanDefinition} subclass for {@code #registerBean} based
@@ -600,8 +628,7 @@ public class GenericApplicationContext extends AbstractApplicationContext implem
 		}
 
 		@Override
-		@Nullable
-		public Constructor<?>[] getPreferredConstructors() {
+		public Constructor<?> @Nullable [] getPreferredConstructors() {
 			Constructor<?>[] fromAttribute = super.getPreferredConstructors();
 			if (fromAttribute != null) {
 				return fromAttribute;

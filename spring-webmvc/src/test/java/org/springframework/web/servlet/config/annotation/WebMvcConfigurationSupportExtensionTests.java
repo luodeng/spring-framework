@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2024 the original author or authors.
+ * Copyright 2002-2025 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,6 +23,7 @@ import java.util.List;
 import java.util.Map;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -35,7 +36,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.converter.HttpMessageConverter;
 import org.springframework.http.converter.StringHttpMessageConverter;
 import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
-import org.springframework.lang.Nullable;
 import org.springframework.scheduling.concurrent.ConcurrentTaskExecutor;
 import org.springframework.stereotype.Controller;
 import org.springframework.util.AntPathMatcher;
@@ -75,7 +75,6 @@ import org.springframework.web.servlet.mvc.annotation.ResponseStatusExceptionRes
 import org.springframework.web.servlet.mvc.method.RequestMappingInfo;
 import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerAdapter;
 import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping;
-import org.springframework.web.servlet.resource.ResourceHttpRequestHandler;
 import org.springframework.web.servlet.resource.ResourceUrlProviderExposingInterceptor;
 import org.springframework.web.servlet.view.ContentNegotiatingViewResolver;
 import org.springframework.web.servlet.view.InternalResourceViewResolver;
@@ -88,7 +87,6 @@ import org.springframework.web.util.UrlPathHelper;
 import static com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES;
 import static com.fasterxml.jackson.databind.MapperFeature.DEFAULT_VIEW_INCLUSION;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.InstanceOfAssertFactories.BOOLEAN;
 import static org.mockito.Mockito.mock;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.http.MediaType.APPLICATION_XML;
@@ -124,10 +122,11 @@ class WebMvcConfigurationSupportExtensionTests {
 		this.config.setServletContext(this.context.getServletContext());
 	}
 
+	@SuppressWarnings("removal")
 	@Test
 	void handlerMappings() throws Exception {
 		RequestMappingHandlerMapping rmHandlerMapping = this.config.requestMappingHandlerMapping(
-				this.config.mvcContentNegotiationManager(),
+				this.config.mvcContentNegotiationManager(), this.config.mvcApiVersionStrategy(),
 				this.config.mvcConversionService(), this.config.mvcResourceUrlProvider());
 		rmHandlerMapping.setApplicationContext(this.context);
 		rmHandlerMapping.afterPropertiesSet();
@@ -240,8 +239,6 @@ class WebMvcConfigurationSupportExtensionTests {
 		DeferredResultProcessingInterceptor[] deferredResultInterceptors =
 				(DeferredResultProcessingInterceptor[]) fieldAccessor.getPropertyValue("deferredResultInterceptors");
 		assertThat(deferredResultInterceptors).hasSize(1);
-
-		assertThat(fieldAccessor.getPropertyValue("ignoreDefaultModelOnRedirect")).asInstanceOf(BOOLEAN).isTrue();
 	}
 
 	@Test
@@ -264,14 +261,13 @@ class WebMvcConfigurationSupportExtensionTests {
 	}
 
 	@Test
-	@SuppressWarnings("deprecation")
 	public void contentNegotiation() throws Exception {
 		MockHttpServletRequest request = new MockHttpServletRequest("GET", "/foo");
 		NativeWebRequest webRequest = new ServletWebRequest(request);
 
 		RequestMappingHandlerMapping mapping = this.config.requestMappingHandlerMapping(
-				this.config.mvcContentNegotiationManager(), this.config.mvcConversionService(),
-				this.config.mvcResourceUrlProvider());
+				this.config.mvcContentNegotiationManager(), this.config.mvcApiVersionStrategy(),
+				this.config.mvcConversionService(), this.config.mvcResourceUrlProvider());
 
 		request.setParameter("f", "json");
 		ContentNegotiationManager manager = mapping.getContentNegotiationManager();
@@ -287,11 +283,7 @@ class WebMvcConfigurationSupportExtensionTests {
 
 		request = new MockHttpServletRequest("GET", "/resources/foo.gif");
 		HandlerExecutionChain chain = handlerMapping.getHandler(request);
-
 		assertThat(chain).isNotNull();
-		ResourceHttpRequestHandler handler = (ResourceHttpRequestHandler) chain.getHandler();
-		assertThat(handler).isNotNull();
-		assertThat(handler.getContentNegotiationManager()).isSameAs(manager);
 	}
 
 	@Test
@@ -355,7 +347,7 @@ class WebMvcConfigurationSupportExtensionTests {
 	 * plus WebMvcConfigurer can switch to extending WebMvcConfigurationSupport directly for
 	 * more advanced configuration needs.
 	 */
-	private class TestWebMvcConfigurationSupport extends WebMvcConfigurationSupport implements WebMvcConfigurer {
+	private static class TestWebMvcConfigurationSupport extends WebMvcConfigurationSupport implements WebMvcConfigurer {
 
 		@Override
 		public void addFormatters(FormatterRegistry registry) {
@@ -393,6 +385,11 @@ class WebMvcConfigurationSupportExtensionTests {
 		}
 
 		@Override
+		public void configureApiVersioning(ApiVersionConfigurer configurer) {
+			configurer.useRequestHeader("X-API-Version");
+		}
+
+		@Override
 		@SuppressWarnings("deprecation")
 		public void configureAsyncSupport(AsyncSupportConfigurer configurer) {
 			configurer.setDefaultTimeout(2500).setTaskExecutor(new ConcurrentTaskExecutor())
@@ -420,6 +417,7 @@ class WebMvcConfigurationSupportExtensionTests {
 			exceptionResolvers.add(0, new ResponseStatusExceptionResolver());
 		}
 
+		@SuppressWarnings("removal")
 		@Override
 		public void configurePathMatch(PathMatchConfigurer configurer) {
 			configurer.setPathMatcher(new TestPathMatcher());
@@ -457,7 +455,7 @@ class WebMvcConfigurationSupportExtensionTests {
 
 		@Override
 		public void addResourceHandlers(ResourceHandlerRegistry registry) {
-			registry.addResourceHandler("/resources/**").addResourceLocations("src/test/java");
+			registry.addResourceHandler("/resources/**").addResourceLocations("src/test/java/");
 		}
 
 		@Override
